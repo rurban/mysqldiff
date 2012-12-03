@@ -252,7 +252,8 @@ sub _parse {
 
         # Also can be /^(KEY|UNIQUE(?: KEY)?)\s+(\S+?)(?:\s+USING\s+(?:BTREE|HASH|RTREE))?\s*\((.*)\)$/
         # and /^(KEY|UNIQUE(?: KEY)?)\s+(\S+?)\s+\((.*)\)(\s+USING\s+(?:BTREE|HASH|RTREE))?(.*)$/
-        if (/^(KEY|UNIQUE(?: KEY)?)\s+(\S+?)\s+\((.*)\)(.*)$/) {
+        my $indexregexp = '^(KEY|UNIQUE(?: KEY)?)\s+(' . ($c ? '`.+?`' : '\S+?') . ')\s+\((.*)\)(.*)$';
+        if (/$indexregexp/) {
             my ($type, $key, $val, $opts) = ($1, $2, $3, $4);
             croak "index '$key' duplicated in table '$name'\n"
                 if $self->{indices}{$key};
