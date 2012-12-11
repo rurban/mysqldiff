@@ -333,7 +333,7 @@ sub _get_defs {
     if (!$self->{db_name}) {
         $self->{temp_db_name} = $db;
     }
-    my $fh = IO::File->new("mysqldump -d -q --single-transaction --force --skip-triggers $args $db 2>$errors_fname |")
+    my $fh = IO::File->new("mysqldump -d -q --force --skip-triggers $args $db 2>$errors_fname |")
         or die "Couldn't read ${db}'s table defs via mysqldump: $!\n";
     debug(6, "running mysqldump -d $args $db");
     my $defs = $self->{_defs} = [ <$fh> ];
@@ -421,7 +421,9 @@ sub _parse_defs {
                     $sth = $dbh->prepare($s);
                     $sth->execute();
                     my @row = $sth->fetchrow_array();
-                    $defs .= "\n$row[2]";
+                    if (defined $row[2]) {
+                        $defs .= "\n$row[2]";
+                    }
                     $sth->finish();
                 }
             }
