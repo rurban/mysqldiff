@@ -442,13 +442,13 @@ sub _parse_defs {
     $counters->{routines} = 0;
     for my $table (@tables) {
         debug(5, "  table def [$table]");
-        if($table =~ /create\s+table/i) {
+        if($table =~ /create\s+table\s+/i) {
             my $obj = MySQL::Diff::Table->new(source => $self->{_source}, def => $table);
             $self->{_by_name}{$obj->name()} = $obj;
             $self->{tables_order}{$obj->name()} = $counters->{tables};
             $counters->{tables} += 1;
         } 
-        elsif ($table =~ /create\s+.*?\s+view/is) {
+        elsif ($table =~ /create\s+.*?\s+view\s+/is) {
             my $obj = MySQL::Diff::View->new(source => $self->{_source}, def => $table);
             $self->{v_by_name}{$obj->name()} = $obj;
             if ($self->{_by_name}{$obj->name()}) {
@@ -458,7 +458,7 @@ sub _parse_defs {
             $self->{views_order}{$obj->name()} = $counters->{views};
             $counters->{views} += 1;
         }
-        elsif ($table =~ /create\s+.*?\s+(trigger|function|procedure)/is) {
+        elsif ($table =~ /create\s+.*?\s+(trigger|function|procedure)\s+/is) {
             my $obj = MySQL::Diff::Routine->new(source => $self->{_source}, def => $table);
             $self->{r_by_name}{$obj->type()}{$obj->name()} = $obj;
             $self->{routines_order}{$obj->name()} = $counters->{routines};
