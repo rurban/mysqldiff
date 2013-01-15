@@ -512,6 +512,8 @@ sub _diff_fields {
                                         debug(3, "field $field was changed to be a primary key");
                                         $pk = ' PRIMARY KEY';
                                         $weight = 1;
+                                        # Flag we add PK's column(s)
+                                        $self->{added_pk} = 1;
                                     } else {
                                         # This way, we can to add PRIMARY KEY __operator__ when last part of PK was obtained
                                         debug(3, "field $field is a part of composite primary key and it was changed");
@@ -520,10 +522,9 @@ sub _diff_fields {
                                             my $p = $table2->primary_key();
                                             $pk = ", ADD PRIMARY KEY $p";
                                             $weight = 1;
+                                            $self->{added_pk} = 1;
                                         }
                                     }
-                                    # Flag we add PK's column(s)
-                                    $self->{added_pk} = 1;
                                 } else {
                                     debug(3, "field '$field' is already PK in table 1");
                                     $pk = '';
@@ -633,6 +634,8 @@ sub _diff_fields {
                             $pk = ' PRIMARY KEY' . $position;
                             $weight = 1;
                             $header_text = 'add_pk';
+                            # Flag we add PK's column(s)
+                            $self->{added_pk} = 1;
                         } else {
                             # This way, we can to add PRIMARY KEY __operator__ when last part of PK was obtained
                             debug(3, "field $field is a part of composite primary key");
@@ -642,11 +645,11 @@ sub _diff_fields {
                                 $pk = $position . ", ADD PRIMARY KEY $p";
                                 $weight = 1;
                                 $header_text = 'add_pk';
+                                # Flag we add PK's column(s)
+                                $self->{added_pk} = 1;
                             }
                         }
                         $alters->{$field} = _add_routine_alters($field, $field_links, $table2);
-                        # Flag we add PK's column(s)
-                        $self->{added_pk} = 1;
                 }
                 my $change = '';
                 $change =  $self->add_header($table2, $header_text) unless !$self->{opts}{'list-tables'};
