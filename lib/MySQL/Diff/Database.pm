@@ -442,7 +442,6 @@ sub _parse_defs {
     $counters->{routines} = 0;
     for my $table (@tables) {
         debug(5, "  table def [$table]");
-        $table = lc($table);
         if($table =~ /create\s+table\s+/i) {
             my $obj = MySQL::Diff::Table->new(source => $self->{_source}, def => $table);
             $self->{_by_name}{$obj->name()} = $obj;

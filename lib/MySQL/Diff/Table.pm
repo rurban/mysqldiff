@@ -224,6 +224,7 @@ sub _parse {
         debug(5,"line: [$_]");
         if (/^PRIMARY\s+KEY\s+(.+)$/) {
             my $primary = $1;
+            $primary = lc($primary);
             croak "two primary keys in table '$self->{name}': '$primary', '$self->{primary_key}'\n"
                 if $self->{primary_key};
             debug(4,"got primary key $primary");
@@ -238,6 +239,7 @@ sub _parse {
             my ($key, $column_name, $tbl_name, $opts) = ($1, $2, $3, $4);
             croak "foreign key '$key' duplicated in table '$name'\n"
                 if $self->{foreign_key}{$key};
+            $column_name = lc($column_name);
             debug(4,"got foreign key $key with column name: $column_name, table name: $tbl_name, options: $opts");
             my $val = $column_name.' REFERENCES '.$tbl_name.' '.$opts;
             $self->{foreign_key}{$key} = $val;
@@ -255,6 +257,7 @@ sub _parse {
         my $indexregexp = '^(KEY|UNIQUE(?: KEY)?)\s+(' . ($c ? '`.+?`' : '\S+?') . ')\s+\((.*)\)(.*)$';
         if (/$indexregexp/) {
             my ($type, $key, $val, $opts) = ($1, $2, $3, $4);
+            $val = lc($val);
             croak "index '$key' duplicated in table '$name'\n"
                 if $self->{indices}{$key};
             $self->{indices}{$key} = $val;
@@ -269,6 +272,7 @@ sub _parse {
 
         if (/^(FULLTEXT(?:\s+KEY|INDEX)?)\s+(\S+?)\s*\((.*)\)$/) {
             my ($type, $key, $val) = ($1, $2, $3);
+            $val = lc($val);
             croak "FULLTEXT index '$key' duplicated in table '$name'\n"
                 if $self->{fulltext}{$key};
             $self->{indices}{$key} = $val;
@@ -320,6 +324,7 @@ sub _parse {
 
         if ($field_found) {
             if (!$end_found) {
+                $field = lc($field);
                 $self->{fields}{$field} = $fdef;
                 debug(4,"got field def '$field': $fdef");   
                 if ($prev_field) {
