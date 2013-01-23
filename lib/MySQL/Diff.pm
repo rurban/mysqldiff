@@ -417,6 +417,7 @@ sub _diff_tables {
     my $self = shift;
     $self->{added_pk} = 0;
     $self->{dropped_columns} = {};
+    $self->{added_index} = {};
     $self->{fk_for_pk} = {};
     $self->{temporary_indexes} = {};
     my @changes = $self->_diff_fields(@_);
@@ -531,7 +532,7 @@ sub _diff_fields {
                                 }
                             }
                         } else {
-                            if ($f2 =~ /DEFAULT NULL/) {
+                            if ($f2 =~ /DEFAULT NULL/is) {
                                 # we must to change this column later, if it was PK in table in first database
                                 # otherwise, it will be not 'DEFAULT NULL', but, for example, for INT column "NOT NULL DEFAULT '0'"
                                 if ($table1->isa_primary($field)) {
@@ -540,6 +541,12 @@ sub _diff_fields {
                                 }
                             }
                         }  
+                        # if it will not be PK, but is auto column, set flag, so auto index can be added before column changing
+                        if (!$self->{added_pk} && ($f2 =~ /AUTO_INCREMENT/is)) {
+                            debug(3, "field $field is auto increment, so we will add index before column changing");
+                            $self->{added_index}{field} = $field;
+                            $self->{added_index}{is_new} = 0;
+                        }
                         my $change = '';
                         $change =  $self->add_header($table2, "change_column") unless !$self->{opts}{'list-tables'};
                         $change .= "ALTER TABLE $name1 CHANGE COLUMN $field $field $f2$pk;";
@@ -549,7 +556,7 @@ sub _diff_fields {
                                 $weight = 1;
                         }
                         # column must be changed/added first
-                        push @changes, [$change, {'k' => $weight}];
+                        push @changes, [$change, {'k' => $weight}];   
                     }
                 } 
                 #else {
@@ -651,9 +658,17 @@ sub _diff_fields {
                         }
                         $alters->{$field} = _add_routine_alters($field, $field_links, $table2);
                 }
+                my $field_description = $fields2->{$field};
+                if (!$self->{added_pk} && ($field_description =~ /AUTO_INCREMENT/is)) {
+                    debug(3, "field $field is auto increment, so it will be added without auto_increment clause and then changed when index will be added");
+                    $self->{added_index}{field} = $field;
+                    $self->{added_index}{is_new} = 1;
+                    $self->{added_index}{desc} = $field_description;
+                    $field_description =~ s/AUTO_INCREMENT//is;
+                }
                 my $change = '';
                 $change =  $self->add_header($table2, $header_text) unless !$self->{opts}{'list-tables'};
-                $change .= "ALTER TABLE $name1 ADD COLUMN $field $fields2->{$field}$pk;\n";
+                $change .= "ALTER TABLE $name1 ADD COLUMN $field $field_description$pk;\n";
                 if (!$alters->{$field}) {
                     $alters->{$field} = 1;
                 } else {
@@ -694,6 +709,7 @@ sub _diff_indices {
     return () unless $indices1 || $indices2;
 
     my @changes;
+    my $weight = 3; # index must be added/changed after column add/change and dropped before column drop
 
     if($indices1) {
         for my $index (keys %$indices1) {
@@ -719,8 +735,24 @@ sub _diff_indices {
                     debug(3,"index '$index' changed");
                     my $new_type = $table2->is_unique($index) ? 'UNIQUE' : 
                                    $table2->is_fulltext($index) ? 'FULLTEXT INDEX' : 'INDEX';
+                        
+                    my $auto = _check_for_auto_col($table2, $indices1->{$index}, 0) || '';
+                    # try to check any of index part is AUTO_INCREMENT
+                    my $auto_increment_check = _check_for_auto_col($table1, $indices1->{$index}, 0) || '';
+                    if (!$auto) {
+                         $auto = $auto_increment_check;
+                    }
+                    $auto_increment_check = $auto  ? 1 : 0;
                     my $changes = '';
                     $changes = $self->add_header($table2, "change_index") unless !$self->{opts}{'list-tables'};
+                    $changes .= $auto ? _index_auto_col($table1, $indices1->{$index}, $self->{opts}{'no-old-defs'}) : '';
+                    if ($auto) {
+                        my $auto_index_name = "mysqldiff_".md5_hex($name1."_".$auto);
+                        debug(3, "Auto column $auto indexed with index called $auto_index_name");
+                        if (!$self->{temporary_indexes}{$auto_index_name}) {
+                            $self->{temporary_indexes}{$auto_index_name} = $auto;
+                        }
+                    }
                     my $index_parts = $table1->indices_parts($index);
                     if ($index_parts) {
                         for my $index_part (keys %$index_parts) {
@@ -739,18 +771,43 @@ sub _diff_indices {
                     $changes .= " # was $old_type ($indices1->{$index})$ind1_opts"
                         unless $self->{opts}{'no-old-defs'};
                     $changes .= "\nALTER TABLE $name1 ADD $new_type $index ($indices2->{$index})$ind2_opts;\n";
-                    push @changes, [$changes, {'k' => 3}]; # index must be added/changed after column add/change
+                    if (keys %$self->{added_index} && $auto_increment_check) {
+                        # alter column after 
+                        if ($self->{added_index}{is_new}) {
+                            my $desc = $self->{added_index}{desc};
+                            my $f = $self->{added_index}{field};
+                            $changes .= "ALTER TABLE $name1 CHANGE COLUMN $f $f $desc;\n";
+                        }
+                        else {
+                            $weight = 6; # in this case index must be added before column change
+                        }
+                        # reset added index description
+                        $self->{added_index} = {};
+                    }
+                    push @changes, [$changes, {'k' => $weight}]; 
                 }
             } else {
-                my $auto = _check_for_auto_col($table2, $indices1->{$index}, 1) || '';
+                my $auto = _check_for_auto_col($table2, $indices1->{$index}, 0) || '';
+                # try to check any of index part is AUTO_INCREMENT
+                my $auto_increment_check = _check_for_auto_col($table1, $indices1->{$index}, 0) || '';
+                if (!$auto) {
+                    $auto = $auto_increment_check;
+                }
+                $auto_increment_check = $auto ? 1 : 0;
                 my $changes = '';
                 $changes = $self->add_header($table1, "drop_index") unless !$self->{opts}{'list-tables'};
                 $changes .= $auto ? _index_auto_col($table1, $indices1->{$index}, $self->{opts}{'no-old-defs'}) : '';
                 if ($auto) {
-                    debug(3, "Auto column $auto indexed");
                     my $auto_index_name = "mysqldiff_".md5_hex($name1."_".$auto);
-                    if (!$self->{temporary_indexes}{$auto_index_name}) {
-                        $self->{temporary_indexes}{$auto_index_name} = $auto;
+                    debug(3, "Auto column $auto indexed with index called $auto_index_name");
+                    if ($auto_increment_check && $self->{dropped_columns}{$auto}) {
+                        debug(3, "Index $auto_index_name was not added to temporary indexes, because of column will be dropped");
+                    }
+                    else {
+                        if (!$self->{temporary_indexes}{$auto_index_name}) {
+                            debug(3, "Index $auto_index_name was added to temporary indexes, because of column will not be dropped and is auto increment") if $auto_increment_check;
+                            $self->{temporary_indexes}{$auto_index_name} = $auto;
+                        }
                     }
                 }
                 my $index_parts = $table1->indices_parts($index);
@@ -771,7 +828,18 @@ sub _diff_indices {
                 $changes .= " # was $old_type ($indices1->{$index})$ind1_opts" 
                     unless $self->{opts}{'no-old-defs'};
                 $changes .= "\n";
-                push @changes, [$changes, {'k' => 3}]; # index must be dropped before column drop
+                if (keys %$self->{added_index} && $auto_increment_check) {
+                    # alter column after 
+                    if ($self->{added_index}{is_new}) {
+                        my $desc = $self->{added_index}{desc};
+                        my $f = $self->{added_index}{field};
+                        $changes .= "ALTER TABLE $name1 CHANGE COLUMN $f $f $desc;\n";
+                    }
+                    else {
+                        $weight = 6; # in this case index must be added before column change
+                    }
+                }
+                push @changes, [$changes, {'k' => $weight}];
             }
         }
     }
@@ -785,7 +853,6 @@ sub _diff_indices {
             if ($opts2->{$index}) {
                 $opts = $opts2->{$index};
             }
-            my $weight = 3;
             my $parts = $table2->indices_parts($index);
             # indexes for PK and timestamp columns 
             for my $ip (keys %$parts) {
@@ -798,9 +865,21 @@ sub _diff_indices {
                     last;
                 }
             }
+            my $auto = _check_for_auto_col($table2, $indices2->{$index}, 0) || '';
             my $changes = '';
             $changes = $self->add_header($table2, "add_index") unless !$self->{opts}{'list-tables'};
             $changes .= "ALTER TABLE $name1 ADD $new_type $index ($indices2->{$index})$opts;\n";
+            if (keys %$self->{added_index} && $auto) {
+                # alter column after 
+                if ($self->{added_index}{is_new}) {
+                    my $desc = $self->{added_index}{desc};
+                    my $f = $self->{added_index}{field};
+                    $changes .= "ALTER TABLE $name1 CHANGE COLUMN $f $f $desc;\n";
+                }
+                else {
+                    $weight = 6; # in this case index must be added before column change
+                }
+            }
             push @changes, [$changes, {'k' => $weight}];
         }
     }
@@ -966,13 +1045,13 @@ sub _check_for_auto_col {
 
     $fields =~ s/^\s*\((.*)\)\s*$/$1/g; # strip brackets if any
     my @fields = split /\s*,\s*/, $fields;
-
+    
     for my $field (@fields) {
         my $not_is_field = (!$table->field($field));
         debug(3, "field '$field' not exists in table in second database") if $not_is_field;
         next if $not_is_field;
         my $not_AI = ($table->field($field) !~ /auto_increment/i);
-        debug(3, "field '$field' is not AUTO_INCREMENT in table in second database") if $not_AI;
+        debug(3, "field '$field' is not AUTO_INCREMENT in table in second database (" . $table->field($field)  . ")") if $not_AI;
         next if $not_AI;
         #next if($table->isa_index($field));
         my $pk = ($primary && $table->isa_primary($field));
