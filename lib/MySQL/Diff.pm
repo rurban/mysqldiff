@@ -771,7 +771,7 @@ sub _diff_indices {
                     $changes .= " # was $old_type ($indices1->{$index})$ind1_opts"
                         unless $self->{opts}{'no-old-defs'};
                     $changes .= "\nALTER TABLE $name1 ADD $new_type $index ($indices2->{$index})$ind2_opts;\n";
-                    if (keys $self->{added_index} && $auto_increment_check) {
+                    if (keys %{$self->{added_index}} && $auto_increment_check) {
                         # alter column after 
                         if ($self->{added_index}{is_new}) {
                             my $desc = $self->{added_index}{desc};
@@ -828,7 +828,7 @@ sub _diff_indices {
                 $changes .= " # was $old_type ($indices1->{$index})$ind1_opts" 
                     unless $self->{opts}{'no-old-defs'};
                 $changes .= "\n";
-                if (keys $self->{added_index} && $auto_increment_check) {
+                if (keys %{$self->{added_index}} && $auto_increment_check) {
                     # alter column after 
                     if ($self->{added_index}{is_new}) {
                         my $desc = $self->{added_index}{desc};
@@ -869,7 +869,7 @@ sub _diff_indices {
             my $changes = '';
             $changes = $self->add_header($table2, "add_index") unless !$self->{opts}{'list-tables'};
             $changes .= "ALTER TABLE $name1 ADD $new_type $index ($indices2->{$index})$opts;\n";
-            if (keys $self->{added_index} && $auto) {
+            if (keys %{$self->{added_index}} && $auto) {
                 # alter column after 
                 if ($self->{added_index}{is_new}) {
                     my $desc = $self->{added_index}{desc};
