@@ -266,7 +266,7 @@ sub available_dbs {
     my $fh = IO::File->new("mysqlshow$args |") or die "Couldn't execute 'mysqlshow$args': $!\n";
     my @dbs;
     while (<$fh>) {
-        next unless /^\| ([\w-]+)/;
+        next unless /^\| ([\S]+)/;
         push @dbs, $1;
     }
     $fh->close() or die "mysqlshow$args failed: $!";
