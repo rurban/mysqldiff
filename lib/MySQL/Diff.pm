@@ -753,9 +753,13 @@ sub _diff_indices {
                             $self->{temporary_indexes}{$auto_index_name} = $auto;
                         }
                     }
+                    my $is_timestamp = 0;
+                    my $index_dropped_by_all_parts = 0;
+                    my $index_part;
                     my $index_parts = $table1->indices_parts($index);
+                    # check index parts is FK in second table, or is timestamp column in second table
                     if ($index_parts) {
-                        for my $index_part (keys %$index_parts) {
+                        for $index_part (keys %$index_parts) {
                             my $fks = $table2->get_fk_by_col($index_part);
                             if ($fks) {
                                 my $temp_index_name = "temp_".md5_hex($index_part);
@@ -765,11 +769,48 @@ sub _diff_indices {
                                     $changes .= "ALTER TABLE $name1 ADD INDEX $temp_index_name ($index_part);\n";
                                 }
                             }
+                            my $field_index_part = $table2->field($index_part);
+                            if ($field_index_part && ($field_index_part =~ /(CURRENT_TIMESTAMP(?:\(\))?|NOW\(\)|LOCALTIME(?:\(\))?|LOCALTIMESTAMP(?:\(\))?)/)) {
+                                $weight = 1;
+                                $is_timestamp = 1;
+                            }
                         }
                     }
-                    $changes .= "ALTER TABLE $name1 DROP INDEX $index;";
-                    $changes .= " # was $old_type ($indices1->{$index})$ind1_opts"
-                        unless $self->{opts}{'no-old-defs'};
+                    # check index part of this index is second table is its timestamp column
+                    $index_parts = $table2->indices_parts($index);
+                    if ($index_parts) {
+                        for $index_part (keys %$index_parts) {
+                            if ($table2->field($index_part) =~ /(CURRENT_TIMESTAMP(?:\(\))?|NOW\(\)|LOCALTIME(?:\(\))?|LOCALTIMESTAMP(?:\(\))?)/) {
+                                $weight = 1;
+                                $is_timestamp = 1;
+                            }
+                        }
+                    }
+                    if ($is_timestamp) {
+                        $index_parts = $table1->indices_parts($index);
+                        if ($index_parts) {
+                            my $iter = 0;
+                            $index_dropped_by_all_parts = 1;
+                            # if empty parts;
+                            for $index_part (keys %$index_parts) {
+                                $iter = 1;
+                                debug(3, "check column $index_part is dropped");
+                                # if in second table current column was dropped, check if all parts of index was dropped
+                                $index_dropped_by_all_parts = $index_dropped_by_all_parts && $self->{dropped_columns}{$index_part};
+                            }
+                            if (!$iter) {
+                                $index_dropped_by_all_parts = 0;
+                            }
+                        }
+                    }
+                    if ($index_dropped_by_all_parts) {
+                        debug(3, "All parts of index $index was dropped, so timestamp column not needed in drop index");
+                    }
+                    else {
+                        $changes .= "ALTER TABLE $name1 DROP INDEX $index;";
+                        $changes .= " # was $old_type ($indices1->{$index})$ind1_opts"
+                            unless $self->{opts}{'no-old-defs'};
+                    }
                     $changes .= "\nALTER TABLE $name1 ADD $new_type $index ($indices2->{$index})$ind2_opts;\n";
                     if (keys %{$self->{added_index}} && $auto_increment_check) {
                         # alter column after 
