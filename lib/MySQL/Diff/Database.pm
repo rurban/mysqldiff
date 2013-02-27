@@ -349,6 +349,12 @@ authorizing full access to all databases matching 'test\\_%', and that
 the database doesn't already exist.
 EOF
     }
+    if (@errs_lines) {
+        print "Errors from mysqldump:\n";
+        print "@errs_lines";
+        print "mysqldiff cannot get diff because of this errors\n";
+        exit(1); 
+    }
     close (DUMP_ERRS);
 }
 

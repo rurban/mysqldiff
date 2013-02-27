@@ -77,7 +77,21 @@ sub new {
     }
 
     if (!-d $dir_path) {
-        mkdir $dir_path, 0777;
+        my $tdir;
+        my $accum = '';
+        my $ret;
+        foreach $tdir (split(/\//, $dir_path)){
+            $accum = "$accum$tdir/";
+            if($tdir ne ""){
+                if(!-d "$accum"){
+                    $ret = mkdir $accum, 0777;
+                    if (!$ret) {
+                        print "Cannot create directory $accum: $!\n";
+                        exit(1);
+                    }
+                }
+            }
+        }
     }
     save_logdir($dir_path);
 
