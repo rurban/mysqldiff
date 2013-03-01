@@ -333,7 +333,7 @@ sub _get_defs {
     if (!$self->{db_name}) {
         $self->{temp_db_name} = $db;
     }
-    my $fh = IO::File->new("mysqldump -d -q --force --skip-triggers $args $db 2>$errors_fname |")
+    my $fh = IO::File->new("mysqldump -d -q --force --skip-lock-tables --skip-triggers $args $db 2>$errors_fname |")
         or die "Couldn't read ${db}'s table defs via mysqldump: $!\n";
     debug(6, "running mysqldump -d $args $db");
     my $defs = $self->{_defs} = [ <$fh> ];
