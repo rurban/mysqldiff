@@ -349,7 +349,7 @@ authorizing full access to all databases matching 'test\\_%', and that
 the database doesn't already exist.
 EOF
     }
-    if (@errs_lines) {
+    if (@errs_lines && !grep /Using a password on the command line interface can be insecure/, @errs_lines) {
         print "Errors from mysqldump:\n";
         print "@errs_lines";
         print "mysqldiff cannot get diff because of this errors\n";
