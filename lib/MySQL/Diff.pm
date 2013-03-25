@@ -784,7 +784,7 @@ sub _diff_indices {
                     # check index parts is FK in second table, or is timestamp column in second table
                     if ($index_parts) {
                         for $index_part (keys %$index_parts) {
-                            my $fks = $table2->get_fk_by_col($index_part);
+                            my $fks = $table2->get_fk_by_col($index_part) || $table1->get_fk_by_col($index_part);
                             if ($fks) {
                                 my $temp_index_name = "temp_".md5_hex($index_part);
                                 if (!$self->{temporary_indexes}{$temp_index_name}) {
@@ -913,14 +913,31 @@ sub _diff_indices {
         for my $index (keys %$indices2) {
             next    if($indices1 && $indices1->{$index});
             debug(2,"index '$index' added");
+            my $need_recreate = 0;
+            my $is_fk = 0;
+            if ($table2->isa_fk($index)) {
+                debug(3, "index '$index' has same name as foreign key constraint");
+                $is_fk = 1;
+            }
             my $new_type = $table2->is_unique($index) ? 'UNIQUE' : 'INDEX';
             my $opts = '';
             if ($opts2->{$index}) {
                 $opts = $opts2->{$index};
             }
             my $parts = $table2->indices_parts($index);
+            my $changes = '';
             # indexes for PK and timestamp columns 
             for my $ip (keys %$parts) {
+                if ($is_fk) {
+                    my $col_fk = $table2->get_fk_by_col($ip);
+                    if (!$col_fk || !($col_fk eq $index)) {
+                        my $temp_index_name = "rc_temp_".md5_hex($ip);
+                        debug(3, "need recreate index $index, add temporary index $temp_index_name for $ip");
+                        $self->{temporary_indexes}{$temp_index_name} = $ip;
+                        $changes .= "ALTER TABLE $name1 ADD INDEX $temp_index_name ($ip);\n";
+                        $need_recreate = 1;
+                    }
+                }
                 if ($table2->isa_primary($ip)) {
                     $weight = 1;
                     last;
@@ -930,22 +947,28 @@ sub _diff_indices {
                     last;
                 }
             }
-            my $auto = _check_for_auto_col($table2, $indices2->{$index}, 0) || '';
-            my $changes = '';
+            
             $changes = $self->add_header($table2, "add_index") unless !$self->{opts}{'list-tables'};
-            $changes .= "ALTER TABLE $name1 ADD $new_type $index ($indices2->{$index})$opts;\n";
-            if (keys %{$self->{added_index}} && $auto) {
-                # alter column after 
-                if ($self->{added_index}{is_new}) {
-                    my $desc = $self->{added_index}{desc};
-                    my $f = $self->{added_index}{field};
-                    $changes .= "ALTER TABLE $name1 CHANGE COLUMN $f $f $desc;\n";
-                }
-                else {
-                    $weight = 6; # in this case index must be added before column change
-                }
+            if ($need_recreate) {
+                debug(3, "drop index $index to recreate it");
+                $changes .= "ALTER TABLE $name1 DROP INDEX $index;\n";
             }
-            push @changes, [$changes, {'k' => $weight}];
+            if (!$is_fk || $need_recreate) {
+                $changes .= "ALTER TABLE $name1 ADD $new_type $index ($indices2->{$index})$opts;\n";
+                my $auto = _check_for_auto_col($table2, $indices2->{$index}, 0) || '';
+                if (keys %{$self->{added_index}} && $auto) {
+                    # alter column after 
+                    if ($self->{added_index}{is_new}) {
+                        my $desc = $self->{added_index}{desc};
+                        my $f = $self->{added_index}{field};
+                        $changes .= "ALTER TABLE $name1 CHANGE COLUMN $f $f $desc;\n";
+                    }
+                    else {
+                        $weight = 6; # in this case index must be added before column change
+                    }
+                }
+                push @changes, [$changes, {'k' => $weight}];
+            }
         }
     }
 
