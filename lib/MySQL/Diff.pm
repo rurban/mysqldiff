@@ -432,6 +432,7 @@ sub _diff_tables {
     $self->{added_pk} = 0;
     $self->{dropped_columns} = {};
     $self->{added_index} = {};
+    $self->{added_for_fk} = {};
     $self->{fk_for_pk} = {};
     $self->{temporary_indexes} = {};
     my @changes = $self->_diff_fields(@_);
@@ -672,6 +673,15 @@ sub _diff_fields {
                         }
                         $alters->{$field} = _add_routine_alters($field, $field_links, $table2);
                 }
+                
+                my $fks_for_added = $table2->get_fk_by_col($field);
+                if ($fks_for_added) {
+                    for my $fk_for_added (keys %$fks_for_added) {
+                        # save foreign keys names in hash to check it after
+                        $self->{added_for_fk}{$fk_for_added} = 1;
+                    }
+                }
+                
                 my $field_description = $fields2->{$field};
                 if (!$self->{added_pk} && ($field_description =~ /AUTO_INCREMENT/is)) {
                     debug(3, "field $field is auto increment, so it will be added without auto_increment clause and then changed when index will be added");
@@ -1060,8 +1070,15 @@ sub _diff_foreign_key {
                     $changes .= "ALTER TABLE $name1 DROP FOREIGN KEY $fk;";
                     $changes .= " # was CONSTRAINT $fk FOREIGN KEY $fks1->{$fk}"
                         unless $self->{opts}{'no-old-defs'};
-                    $changes .= "\nALTER TABLE $name1 ADD CONSTRAINT $fk FOREIGN KEY $fks2->{$fk};\n";                 
-                    push @changes, [$changes, {'k' => 6}]; # CHANGE FK before column for it may be changed
+                    $changes .= "\nALTER TABLE $name1 ADD CONSTRAINT $fk FOREIGN KEY $fks2->{$fk};\n";    
+                    # CHANGE FK before column for it may be changed
+                    my $weight = 6;
+                    if ($self->{added_for_fk}{$fk}) {
+                        # if fk was changed and it reference by new column, change it after column adding
+                        $weight = 5;
+                    }
+                            
+                    push @changes, [$changes, {'k' => $weight}]; 
                 }
             } else {
                 debug(3,"foreign key '$fk' removed");
