@@ -618,7 +618,7 @@ sub _diff_fields {
                     }
                     if ($prev_field_links && $prev_field_links->{'next_field'}) {
                         if (!$after_ts) {
-                            if ($alters->{$prev_field}) {
+                            if ($alters->{$prev_field} && !($table2->isa_primary($prev_field))) {
                                 # field before was already added, so it's safe to add current field with AFTER clause
                                 $position = " AFTER $prev_field";
                             } else {
@@ -649,7 +649,7 @@ sub _diff_fields {
                 my $pk = $position;
                 my $header_text = 'add_column';
                 # if it is PK...
-                if ($table2->isa_primary($field)) {
+                if ($table2->isa_primary($field)) { 
                         if ($size == 1) {
                             # if PK is non-composite we can to add PRIMARY KEY clause
                             debug(3, "field $field is a primary key");
@@ -736,6 +736,7 @@ sub _diff_indices {
     my $weight = 3; # index must be added/changed after column add/change and dropped before column drop
 
     if($indices1) {
+        my $indexes_for_fks = {};
         for my $index (keys %$indices1) {
             my $ind1_opts = '';
             my $ind2_opts = '';
@@ -748,6 +749,37 @@ sub _diff_indices {
             debug(2,"$name1 had index '$index' with opts: $ind1_opts");
             my $old_type = $table1->is_unique($index) ? 'UNIQUE' : 
                            $table1->is_fulltext($index) ? 'FULLTEXT INDEX' : 'INDEX';
+                           
+            # if index has same name as FK in _first_ table, and there isn't FK in _second_ table,
+            # so we will create DROP FK statement after and in deleting or changing index conditions
+            # we will just "cover" index part columns with temporary indexes;
+            # if index has same name as FK in _first_ table, and there _is_ FK in _second_ table,
+            # so we will create DROP FK and then ADD FK statements after. 
+            # So we need to check all parts of index are exists in this FK - in this case, we do not need to drop index
+            # _before_ FK will be created; in other case, we must to do:
+            # 1. ADD INDEX rc_temp_....  - to "cover" missing index part with temporary index
+            # 2. DROP INDEX $index - to drop index before FK will be changed (it will automatically create index with this name again)
+            # 3. Wait untill FK changing statements will be added to output 
+            # 4. Do the rest of normal work (DROP $index again or change it)
+            # for steps 1-2
+            my $fks1 = $table1->foreign_key();
+            my $fks2 = $table2->foreign_key();
+            my $is_fk = 0;
+            # for step 1
+            my $rc_index_name = '';
+            my $fk_col = '';
+            # for step 2
+            my $need_drop = 0;
+            if ($table2->isa_fk($index)) {
+                $fks1 = $fks1->{$index} || '';
+                $fks2 = $fks2->{$index} || '';
+                debug(3, "index '$index' has same name as foreign key constraint");
+                debug(3, "FK in table1 is $fks1, FK in table2 is $fks2");
+                if (!($fks1 eq $fks2)) {
+                    debug(3, "index '$index' will be recreated");
+                    $is_fk = 1;  
+                } 
+            }
 
             if ($indices2 && $indices2->{$index}) {
                 if( ($indices1->{$index} ne $indices2->{$index}) or
@@ -781,7 +813,7 @@ sub _diff_indices {
                     my $index_dropped_by_all_parts = 0;
                     my $index_part;
                     my $index_parts = $table1->indices_parts($index);
-                    # check index parts is FK in second table, or is timestamp column in second table
+                    # check index parts is FK in second or first table, or it is timestamp column in second table
                     if ($index_parts) {
                         for $index_part (keys %$index_parts) {
                             my $fks = $table2->get_fk_by_col($index_part) || $table1->get_fk_by_col($index_part);
@@ -804,12 +836,28 @@ sub _diff_indices {
                     $index_parts = $table2->indices_parts($index);
                     if ($index_parts) {
                         for $index_part (keys %$index_parts) {
+                            if ($is_fk) {
+                                $fk_col = $table2->get_fk_by_col($index_part);
+                                # do the step 1
+                                if (!$fk_col || !($fk_col->{$index}) || !($fk_col->{$index} eq $fks1)) {
+                                    $need_drop = 1;
+                                    $rc_index_name = "rc_temp_".md5_hex($index_part)."_change";
+                                    $self->{temporary_indexes}{$rc_index_name} = $index_part;
+                                    debug(3, "Added temporary index $rc_index_name for INDEX's field $index_part because there is FK for this field in SECOND table and index $index has same name as FK");
+                                    push @changes, ["ALTER TABLE $name1 ADD INDEX $rc_index_name ($index_part);\n", {'k' => $self->{added_for_fk}{$index} ? 5 : 6}]; 
+                                }
+                            }
                             if ($table2->field($index_part) =~ /(CURRENT_TIMESTAMP(?:\(\))?|NOW\(\)|LOCALTIME(?:\(\))?|LOCALTIMESTAMP(?:\(\))?)/) {
                                 $weight = 1;
                                 $is_timestamp = 1;
                             }
                         }
                     }
+                    # do the step 2
+                    if ($need_drop) {
+                        debug(3, "drop index $index to change it later FK changing");
+                        push @changes, ["ALTER TABLE $name1 DROP INDEX $index;\n", {'k' => $self->{added_for_fk}{$index} ? 5 : 6}]; 
+                    }                    
                     if ($is_timestamp) {
                         $index_parts = $table1->indices_parts($index);
                         if ($index_parts) {
@@ -878,7 +926,18 @@ sub _diff_indices {
                 my $index_parts = $table1->indices_parts($index);
                 if ($index_parts) {
                     for my $index_part (keys %$index_parts) {
-                        my $fks = $table2->get_fk_by_col($index_part);
+                        if ($is_fk) {
+                            $fk_col = $table2->get_fk_by_col($index_part);
+                            # do the step 1
+                            if (!$fk_col || !($fk_col->{$index}) || !($fk_col->{$index} eq $fks1)) {
+                                $need_drop = 1;
+                                $rc_index_name = "rc_temp_".md5_hex($index_part)."_drop";
+                                $self->{temporary_indexes}{$rc_index_name} = $index_part;
+                                debug(3, "Added temporary index $rc_index_name for INDEX's field $index_part in drop index condition because there is FK for this field in SECOND table and index $index has same name as FK");
+                                push @changes, ["ALTER TABLE $name1 ADD INDEX $rc_index_name ($index_part);\n", {'k' => $self->{added_for_fk}{$index} ? 5 : 6}]; 
+                            }
+                        }
+                        my $fks = $table2->get_fk_by_col($index_part) || $table1->get_fk_by_col($index_part);
                         if ($fks) {
                             my $temp_index_name = "temp_".md5_hex($index_part);
                             if (!$self->{temporary_indexes}{$temp_index_name}) {
@@ -889,6 +948,11 @@ sub _diff_indices {
                         }
                     }
                 }
+                # do the step 2
+                if ($need_drop) {
+                    debug(3, "drop index $index to drop it later FK changing");
+                    push @changes, ["ALTER TABLE $name1 DROP INDEX $index;\n", {'k' => $self->{added_for_fk}{$index} ? 5 : 6}]; 
+                }  
                 $changes .= "ALTER TABLE $name1 DROP INDEX $index;";
                 $changes .= " # was $old_type ($indices1->{$index})$ind1_opts" 
                     unless $self->{opts}{'no-old-defs'};
@@ -930,8 +994,10 @@ sub _diff_indices {
             for my $ip (keys %$parts) {
                 if ($is_fk) {
                     my $col_fk = $table2->get_fk_by_col($ip);
-                    if (!$col_fk || !($col_fk eq $index)) {
-                        my $temp_index_name = "rc_temp_".md5_hex($ip);
+                    # if one of parts of index was not in fk, we will need to change index (drop it and then to create again)
+                    # in other way, index will NOT be created, if it is FK and all parts of it equal to FK parts (because in MySQL constraint automatically creates index)
+                    if (!$col_fk || !($col_fk->{$index})) {
+                        my $temp_index_name = "rc_temp_".md5_hex($ip)."_add";
                         debug(3, "need recreate index $index, add temporary index $temp_index_name for $ip");
                         $self->{temporary_indexes}{$temp_index_name} = $ip;
                         $changes .= "ALTER TABLE $name1 ADD INDEX $temp_index_name ($ip);\n";
