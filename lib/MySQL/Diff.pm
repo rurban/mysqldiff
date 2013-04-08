@@ -738,6 +738,8 @@ sub _diff_indices {
     if($indices1) {
         my $indexes_for_fks = {};
         for my $index (keys %$indices1) {
+            # re-initialize weight
+            $weight = 3; 
             my $ind1_opts = '';
             my $ind2_opts = '';
             if ($opts1 && $opts1->{$index}) {
