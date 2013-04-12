@@ -982,8 +982,14 @@ sub _diff_indices {
             my $need_recreate = 0;
             my $is_fk = 0;
             if ($table2->isa_fk($index)) {
-                debug(3, "index '$index' has same name as foreign key constraint");
-                $is_fk = 1;
+                debug(3, "index '$index' has same name as foreign key constraint in second table");
+                if (!$table1->isa_fk($index)) {
+                    debug(3, "index '$index` is not FK in first table, so it will be automatically added after FK creation");
+                    $is_fk = 1;
+                }
+                else {
+                    debug(3, "index '$index` is FK in first table, so we need to create index");
+                }
             }
             my $new_type = $table2->is_unique($index) ? 'UNIQUE' : 'INDEX';
             my $opts = '';
