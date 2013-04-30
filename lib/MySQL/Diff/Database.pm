@@ -365,6 +365,7 @@ sub _parse_defs {
 
     debug(1, "parsing tables defs");
     my $defs = join '', @{$self->{_defs}};
+    my $routines_defs = '';
     my $c = get_save_quotes();
     if (!$c) {
         $defs =~ s/`//sg;
@@ -383,6 +384,15 @@ sub _parse_defs {
     $defs =~ s/\/\*\!\d+\s+SET\s+.*?;\s*//ig; # delete SETs
     $defs =~ s/\/\*\!\d+\s+(.*?)\*\//\n$1/gs; # get content from executable comments
     $defs =~ s/\/\*.*?\*\/\s*//gs; #delete all multiline comments
+    
+    # initialize structures here
+    $self->{_tables} = [];
+    $self->{_views} = [];
+    $self->{_routines} = [];
+    my $counters;
+    $counters->{tables} = 0;
+    $counters->{views} = 0;
+    $counters->{routines} = 0;
     
     if ($self->{db_name}) {
         my $dsn = "DBI:mysql:$self->{db_name}:$self->{auth_data}{host}";
@@ -427,8 +437,15 @@ sub _parse_defs {
                     $sth = $dbh->prepare($s);
                     $sth->execute();
                     my @row = $sth->fetchrow_array();
+                    # $row[2] contains text of routine
                     if (defined $row[2]) {
-                        $defs .= "\n$row[2]";
+                        # concatenate text to write it to log file after with text of tables and views
+                        $routines_defs .= "\n$row[2]";
+                        my $obj = MySQL::Diff::Routine->new(source => $self->{_source}, def => $row[2]);
+                        $self->{r_by_name}{$obj->type()}{$obj->name()} = $obj;
+                        $self->{routines_order}{$obj->name()} = $counters->{routines};
+                        $counters->{routines} += 1;
+                        push @{$self->{_routines}}, $obj;
                     }
                     $sth->finish();
                 }
@@ -436,16 +453,9 @@ sub _parse_defs {
         }
     }
 
-    write_log('defs_after_'.$db_log.'.sql', $defs);
+    write_log('defs_after_'.$db_log.'.sql', $defs . "\n" . $routines_defs);
 
-    my @tables = split /(?=^\s*(?:create|alter|drop)\s+(?:table|.*?view|.*?function|.*?procedure|.*?trigger)\s+)/ims, $defs;
-    $self->{_tables} = [];
-    $self->{_views} = [];
-    $self->{_routines} = [];
-    my $counters;
-    $counters->{tables} = 0;
-    $counters->{views} = 0;
-    $counters->{routines} = 0;
+    my @tables = split /(?=^\s*(?:create|alter|drop)\s+(?:table|.*?view)\s+)/ims, $defs;
     for my $table (@tables) {
         debug(5, "  table def [$table]");
         if($table =~ /create\s+table\s+/i) {
@@ -463,13 +473,6 @@ sub _parse_defs {
             }
             $self->{views_order}{$obj->name()} = $counters->{views};
             $counters->{views} += 1;
-        }
-        elsif ($table =~ /create\s+.*?\s+(trigger|function|procedure)\s+/is) {
-            my $obj = MySQL::Diff::Routine->new(source => $self->{_source}, def => $table);
-            $self->{r_by_name}{$obj->type()}{$obj->name()} = $obj;
-            $self->{routines_order}{$obj->name()} = $counters->{routines};
-            $counters->{routines} += 1;
-            push @{$self->{_routines}}, $obj;
         }
     }
     if ($self->{db_name}) {
