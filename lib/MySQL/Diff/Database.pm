@@ -398,7 +398,17 @@ sub _parse_defs {
         my $dsn = "DBI:mysql:$self->{db_name}:$self->{auth_data}{host}";
         my $db_user_name = $self->{auth_data}{user};
         my $db_password = $self->{auth_data}{password};
-        $dbh = DBI->connect($dsn, $db_user_name, $db_password);
+        my $errcb = sub {     
+            my $message = shift;
+            print "Error from DBI:\n";
+            print DBI->errstr. "\n";
+            print "mysqldiff cannot get diff because of this error\n";
+            exit(1);  
+        };
+        $dbh = DBI->connect($dsn, $db_user_name, $db_password, {
+            PrintError  => 0,
+            HandleError => \&$errcb,
+        }) or errcb(DBI->errstr);
         $dbh->do(qq{SET NAMES 'utf8';});
         # TODO: refactoring
         # get triggers
