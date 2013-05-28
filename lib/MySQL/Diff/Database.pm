@@ -379,8 +379,7 @@ sub _parse_defs {
         $db_log = $self->{temp_db_name};
     }
     write_log('defs_before_'.$db_log.'.sql', $defs);
-    
-    $defs =~ s/(\#|--).*?\n//g; # delete singleline comments
+    $defs =~ s/^(\#|--).*?$//gim; # delete singleline comments
     $defs =~ s/\/\*\!\d+\s+SET\s+.*?;\s*//ig; # delete SETs
     $defs =~ s/\/\*\!\d+\s+(.*?)\*\//\n$1/gs; # get content from executable comments
     $defs =~ s/\/\*.*?\*\/\s*//gs; #delete all multiline comments
