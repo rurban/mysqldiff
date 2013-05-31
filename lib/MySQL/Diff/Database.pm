@@ -330,10 +330,38 @@ sub _get_defs {
     my $dump_errors_folder = get_logdir() . '/' . 'dump_errors_' . $db;
     mkdir $dump_errors_folder;
     my $errors_fname =  $dump_errors_folder . '/dump_errors_' . time(). '_' . generate_random_string() . '.log';
+    my $need_gtid = 0;
     if (!$self->{db_name}) {
         $self->{temp_db_name} = $db;
     }
-    my $fh = IO::File->new("mysqldump -d -q --force --skip-lock-tables --skip-triggers $args $db 2>$errors_fname |")
+    else {
+        my $dsn = "DBI:mysql:$self->{db_name}:$self->{auth_data}{host}";
+        my $db_user_name = $self->{auth_data}{user};
+        my $db_password = $self->{auth_data}{password};
+        my $errcb = sub {     
+            my $message = shift;
+            print "Error from DBI:\n";
+            print DBI->errstr. "\n";
+            print "mysqldiff cannot get diff because of this error\n";
+            exit(1);  
+        };
+        my $dbh = DBI->connect($dsn, $db_user_name, $db_password, {
+            PrintError  => 0,
+            HandleError => \&$errcb,
+        }) or errcb(DBI->errstr);
+        my $sth = $dbh->prepare(qq{SHOW VARIABLES WHERE `Variable_name` = 'GTID_MODE';});
+        $sth->execute();
+        while (my @row = $sth->fetchrow_array()) {
+            $need_gtid = 1;
+        }
+        $sth->finish();
+        $dbh->disconnect();
+    }
+    my $mysqldump_cmd = "mysqldump -d -q --force --skip-lock-tables --skip-triggers";
+    if ($need_gtid) {
+        $mysqldump_cmd .= ' --set-gtid-purged=AUTO';
+    }
+    my $fh = IO::File->new("$mysqldump_cmd $args $db 2>$errors_fname |")
         or die "Couldn't read ${db}'s table defs via mysqldump: $!\n";
     debug(6, "running mysqldump -d $args $db");
     my $defs = $self->{_defs} = [ <$fh> ];
