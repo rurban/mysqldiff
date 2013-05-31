@@ -37,6 +37,7 @@ use IO::File;
 use DBI;
 use Data::Dumper;
 use Digest::MD5 qw(md5 md5_hex);
+use version;
 
 use MySQL::Diff::Utils qw(debug get_save_quotes write_log get_logdir generate_random_string);
 use MySQL::Diff::Table;
@@ -357,9 +358,23 @@ sub _get_defs {
         $sth->finish();
         $dbh->disconnect();
     }
+    my $gtid_option = 0;
+    my $mysqldump_version = `mysqldump --version`;
+    if ($mysqldump_version =~ m/Distrib\s([\d.]+)/) {
+        my $v1 = version->parse('5.6.9');
+        my $v2 = version->parse($1);
+        if ($v2 >= $v1) {
+            $gtid_option = 1;
+        }
+    }
     my $mysqldump_cmd = "mysqldump -d -q --force --skip-lock-tables --skip-triggers";
-    if ($need_gtid) {
-        $mysqldump_cmd .= ' --set-gtid-purged=AUTO';
+    if ($gtid_option) {
+        if ($need_gtid) {
+            $mysqldump_cmd .= ' --set-gtid-purged=AUTO';
+        }
+        else {
+            $mysqldump_cmd .= ' --set-gtid-purged=OFF';
+        }
     }
     my $fh = IO::File->new("$mysqldump_cmd $args $db 2>$errors_fname |")
         or die "Couldn't read ${db}'s table defs via mysqldump: $!\n";
