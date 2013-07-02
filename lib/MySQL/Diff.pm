@@ -174,7 +174,7 @@ sub diff {
                 my $change = '';
                 $change = $self->add_header($table1, "drop_table") unless !$self->{opts}{'list-tables'};
                 $change .= "DROP TABLE $name;\n\n";
-                push @changes, [$change, {'k' => 8}]                 
+                push @changes, [$change, {'k' => 9}]                 
                     unless $self->{opts}{'only-both'} || $self->{opts}{'keep-old-tables'}; # drop table after all
             }
         } else {
