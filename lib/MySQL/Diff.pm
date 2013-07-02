@@ -174,7 +174,7 @@ sub diff {
                 my $change = '';
                 $change = $self->add_header($table1, "drop_table") unless !$self->{opts}{'list-tables'};
                 $change .= "DROP TABLE $name;\n\n";
-                push @changes, [$change, {'k' => 9}]                 
+                push @changes, [$change, {'k' => 8}]                 
                     unless $self->{opts}{'only-both'} || $self->{opts}{'keep-old-tables'}; # drop table after all
             }
         } else {
@@ -325,7 +325,7 @@ sub diff {
                 my $temp_view = '';
                 debug(2, "looking for temporary table for view '$name'");
                 $temp_view = $self->add_header($name.'_temptable', "add_table", 0, 1) unless !$self->{opts}{'list-tables'};
-                $temp_view .= $self->db2->view_temp($name) . "\n";
+                $temp_view .= "DROP TABLE IF EXISTS $name;\n" . $self->db2->view_temp($name) . "\n";
                 push @changes, [$temp_view, {'k' => 9}] 
                     unless $self->{opts}{'only-both'};    
                 $change = $self->add_header($view2, "add_view") unless !$self->{opts}{'list-tables'};
