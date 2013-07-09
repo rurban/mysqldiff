@@ -170,12 +170,18 @@ sub diff {
                 debug(1,"comparing tables called '$name'");
                 push @changes, $self->_diff_tables($table1, $table2);
             } else {
-                debug(1,"table '$name' dropped");
-                my $change = '';
-                $change = $self->add_header($table1, "drop_table") unless !$self->{opts}{'list-tables'};
-                $change .= "DROP TABLE $name;\n\n";
-                push @changes, [$change, {'k' => 8}]                 
-                    unless $self->{opts}{'only-both'} || $self->{opts}{'keep-old-tables'}; # drop table after all
+                $view_exists = $self->db2->view_by_name($name) ? 1 : 0;
+                if ($view_exists) {
+                    debug(1, "table '$name' is not exists in second database, but there is view with same name");
+                }
+                else {
+                    debug(1,"table '$name' dropped");
+                    my $change = '';
+                    $change = $self->add_header($table1, "drop_table") unless !$self->{opts}{'list-tables'};
+                    $change .= "DROP TABLE $name;\n\n";
+                    push @changes, [$change, {'k' => 8}]                 
+                        unless $self->{opts}{'only-both'} || $self->{opts}{'keep-old-tables'}; # drop table after all
+                }
             }
         } else {
             if (!$self->{'used_tables'}{$name}) {
