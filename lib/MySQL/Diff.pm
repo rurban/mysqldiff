@@ -683,7 +683,7 @@ sub _diff_fields {
                 if ($fks_for_added) {
                     for my $fk_for_added (keys %$fks_for_added) {
                         # save foreign keys names in hash to check it after
-                        $self->{added_for_fk}{$fk_for_added} = 1;
+                        $self->{added_for_fk}{$fk_for_added} = $weight;
                     }
                 }
                 
@@ -1102,7 +1102,7 @@ sub _diff_primary_key {
             # store result, all of parts was dropped or not
             $pk_ops = $pk_ops && $self->{dropped_columns}{$pk};
             # for every part we also get foreign keys and add temporary indexes
-            $fks = $table2->get_fk_by_col($pk);
+            $fks = $table2->get_fk_by_col($pk) || $table1->get_fk_by_col($pk);
             if ($fks) {
                 my $temp_index_name = "temp_".md5_hex($pk);
                 if (!$self->{temporary_indexes}{$temp_index_name}) {
@@ -1169,15 +1169,28 @@ sub _diff_foreign_key {
                     debug(3,"foreign key '$fk' changed");
                     my $changes = '';
                     $changes = $self->add_header($table1, 'change_fk', 1) unless !$self->{opts}{'list-tables'};
+                    my $dropped_columns = $self->{dropped_columns};
+                    my $dropped_column_fks;
                     $changes .= "ALTER TABLE $name1 DROP FOREIGN KEY $fk;";
                     $changes .= " # was CONSTRAINT $fk FOREIGN KEY $fks1->{$fk}"
                         unless $self->{opts}{'no-old-defs'};
+                    for my $dk (keys %$dropped_columns) {
+                        $dropped_column_fks = $table1->get_fk_by_col($dk);
+                        for my $dropped_column_fk (keys %$dropped_column_fks) {
+                            if ($dropped_column_fk eq $fk) {
+                                # column which this fk references was dropped, so now it's referenced to another column (may be new column, we dont need to know it)
+                                # in this case, we must to drop fk before column drop
+                                push @changes, [$changes . "\n", {'k' => 6}]; 
+                                $changes = '';
+                            }
+                        }
+                    }
                     $changes .= "\nALTER TABLE $name1 ADD CONSTRAINT $fk FOREIGN KEY $fks2->{$fk};\n";    
                     # CHANGE FK before column for it may be changed
                     my $weight = 6;
                     if ($self->{added_for_fk}{$fk}) {
                         # if fk was changed and it reference by new column, change it after column adding
-                        $weight = 5;
+                        $weight = $self->{added_for_fk}{$fk};
                     }
                             
                     push @changes, [$changes, {'k' => $weight}]; 
