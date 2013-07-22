@@ -993,7 +993,20 @@ sub _diff_indices {
                     $is_fk = 1;
                 }
                 else {
-                    debug(3, "index '$index` is FK in first table, so we need to create index");
+                    # in this case we need to compare FKs in both tables
+                    my $cmp_fks1 = $table1->foreign_key();
+                    my $cmp_fks2 = $table2->foreign_key();
+                    my $cmp_fk1 = $cmp_fks1->{$index} || '';
+                    my $cmp_fk2 = $cmp_fks2->{$index} || '';
+                    # if fk1 is not equal to fk2, there will be generated change FK statements
+                    # in this case, index will be automatically added after FK drop and create
+                    if ($cmp_fk1 eq $cmp_fk2) {
+                        debug(3, "FKs are identically in both tables, so we need to create index '$index'");
+                    }
+                    else {
+                        $is_fk = 1;
+                        debug(3, "FKs are not identically in tables, so index '$index' will be automatically created after FK recreation");
+                    }
                 }
             }
             my $new_type = $table2->is_unique($index) ? 'UNIQUE' : 'INDEX';
