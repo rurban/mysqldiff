@@ -22,13 +22,13 @@ the second.
 
 use warnings;
 
-our $VERSION = '0.48';
+our $VERSION = '0.49';
 
 # ------------------------------------------------------------------------------
 # Libraries
 
 use MySQL::Diff::Database;
-use MySQL::Diff::Utils qw(debug debug_level debug_file set_save_quotes save_logdir write_log);
+use MySQL::Diff::Utils qw(debug debug_level debug_file set_save_quotes save_logdir write_log generate_random_string);
 
 use Data::Dumper;
 use Digest::MD5 qw(md5 md5_hex);
@@ -155,6 +155,46 @@ sub diff {
     my @tables_keys = sort { $tables_order->{$a->name()} <=> $tables_order->{$b->name()} } $self->db1->tables();
     my @views_keys = sort { $views_order->{$a->name()} <=> $views_order->{$b->name()} } $self->db1->views();
     my @routines_keys = sort { $routines_order->{$a->name()} <=> $routines_order->{$b->name()} } $self->db1->routines();
+
+    # workaround temporary procedure for indexes with same name as FK
+    $self->{index_wa} = {};
+    my $index_wa_name = 'workaround_' . generate_random_string();
+    my $index_wa_sql = '@sqlstmt';
+    $self->{index_wa}{'create-stmt'} = <<CREATE_STMT;
+DELIMITER ;;
+
+CREATE PROCEDURE `$index_wa_name`
+(
+    given_table    VARCHAR(64),
+    given_index    VARCHAR(64),
+    index_stmt     TEXT,
+    index_action   VARCHAR(10)
+)
+BEGIN
+
+    DECLARE IndexIsThere INTEGER;
+
+    SELECT COUNT(1) INTO IndexIsThere
+    FROM INFORMATION_SCHEMA.STATISTICS
+    WHERE table_schema = DATABASE() 
+    AND   table_name   = given_table
+    AND   index_name   = given_index;
+
+    IF (IndexIsThere >= 1 AND index_action = 'drop') OR (IndexIsThere = 0 AND index_action = 'create') THEN
+        SET $index_wa_sql = index_stmt;
+        PREPARE st FROM $index_wa_sql;
+        EXECUTE st;
+        DEALLOCATE PREPARE st;
+    END IF;
+
+END ;;
+
+DELIMITER ;
+CREATE_STMT
+
+    $self->{index_wa}{'drop-stmt'} = "DROP PROCEDURE `$index_wa_name`;\n";
+    $self->{index_wa}{'name'} = $index_wa_name;
+    $self->{index_wa}{'used'} = 0;
 
     for my $table1 (@tables_keys) {
         my $name = $table1->name();
@@ -352,7 +392,16 @@ sub diff {
         my @sorted = sort { return $b->[1]->{'k'} cmp $a->[1]->{'k'} } @changes;
         my $column_index = 0;
         my $line = join '', map $_->[$column_index], @sorted;
+        my $wa_name = $self->{index_wa}{'name'};
+        if ($self->{index_wa}{'used'}) {
+            $out .= $self->add_header($wa_name . '_create', 'create_workaround', 0, 1);
+            $out .= $self->{index_wa}{'create-stmt'};
+        }
         $out .= $line;
+        if ($self->{index_wa}{'used'}) {
+            $out .= $self->add_header($wa_name . '_drop', 'drop_workaround', 0, 1);
+            $out .= $self->{index_wa}{'drop-stmt'};
+        }
     }
     return $out;
 }
@@ -726,6 +775,16 @@ sub _add_routine_alters {
     return $res;
 }
 
+sub _add_index_wa_routines {
+    my ($self, $table, $index_name, $stmt, $stmt_type) = @_;
+    my $name = $self->{index_wa}{'name'};
+    $self->{index_wa}{'used'} = 1;
+    # remove quotes to use it in SELECT within stored procedure
+    $table =~ s/`//sg;
+    $index_name =~ s/`//sg;
+    return "CALL `$name` ('$table', '$index_name', '$stmt', '$stmt_type');"
+}
+
 sub _diff_indices {
     my ($self, $table1, $table2) = @_;
     my $name1 = $table1->name();
@@ -738,6 +797,7 @@ sub _diff_indices {
     return () unless $indices1 || $indices2;
 
     my @changes;
+    my $index_wa_stmt;
     my $weight = 3; # index must be added/changed after column add/change and dropped before column drop
 
     if($indices1) {
@@ -863,7 +923,8 @@ sub _diff_indices {
                     # do the step 2
                     if ($need_drop) {
                         debug(3, "drop index $index to change it later FK changing");
-                        push @changes, ["ALTER TABLE $name1 DROP INDEX $index;\n", {'k' => $self->{added_for_fk}{$index} ? 5 : 6}]; 
+                        $index_wa_stmt = $self->_add_index_wa_routines($name1, $index, "ALTER TABLE $name1 DROP INDEX $index;", 'drop');
+                        push @changes, [$index_wa_stmt . "\n", {'k' => $self->{added_for_fk}{$index} ? 5 : 6}]; 
                     }                    
                     if ($is_timestamp) {
                         $index_parts = $table1->indices_parts($index);
@@ -886,11 +947,13 @@ sub _diff_indices {
                         debug(3, "All parts of index $index was dropped, so timestamp column not needed in drop index");
                     }
                     else {
-                        $changes .= "ALTER TABLE $name1 DROP INDEX $index;";
+                        $index_wa_stmt = $self->_add_index_wa_routines($name1, $index, "ALTER TABLE $name1 DROP INDEX $index;", 'drop');
+                        $changes .= $index_wa_stmt;
                         $changes .= " # was $old_type ($indices1->{$index})$ind1_opts"
                             unless $self->{opts}{'no-old-defs'};
                     }
-                    $changes .= "\nALTER TABLE $name1 ADD $new_type $index ($indices2->{$index})$ind2_opts;\n";
+                    $index_wa_stmt = $self->_add_index_wa_routines($name1, $index, "ALTER TABLE $name1 ADD $new_type $index ($indices2->{$index})$ind2_opts;", 'create');
+                    $changes .= "\n" . $index_wa_stmt . "\n";
                     if (keys %{$self->{added_index}} && $auto_increment_check) {
                         # alter column after 
                         if ($self->{added_index}{is_new}) {
@@ -958,9 +1021,11 @@ sub _diff_indices {
                 # do the step 2
                 if ($need_drop) {
                     debug(3, "drop index $index to drop it later FK changing");
-                    push @changes, ["ALTER TABLE $name1 DROP INDEX $index;\n", {'k' => $self->{added_for_fk}{$index} ? 5 : 6}]; 
+                    $index_wa_stmt = $self->_add_index_wa_routines($name1, $index, "ALTER TABLE $name1 DROP INDEX $index;", 'drop');
+                    push @changes, [$index_wa_stmt . "\n", {'k' => $self->{added_for_fk}{$index} ? 5 : 6}]; 
                 }  
-                $changes .= "ALTER TABLE $name1 DROP INDEX $index;";
+                $index_wa_stmt = $self->_add_index_wa_routines($name1, $index, "ALTER TABLE $name1 DROP INDEX $index;", 'drop');
+                $changes .= $index_wa_stmt;
                 $changes .= " # was $old_type ($indices1->{$index})$ind1_opts" 
                     unless $self->{opts}{'no-old-defs'};
                 $changes .= "\n";
@@ -1043,10 +1108,12 @@ sub _diff_indices {
             $changes = $self->add_header($table2, "add_index") unless !$self->{opts}{'list-tables'};
             if ($need_recreate) {
                 debug(3, "drop index $index to recreate it");
-                $changes .= "ALTER TABLE $name1 DROP INDEX $index;\n";
+                $index_wa_stmt = $self->_add_index_wa_routines($name1, $index, "ALTER TABLE $name1 DROP INDEX $index;", 'drop');
+                $changes .= $index_wa_stmt . "\n";
             }
             if (!$is_fk || $need_recreate) {
-                $changes .= "ALTER TABLE $name1 ADD $new_type $index ($indices2->{$index})$opts;\n";
+                $index_wa_stmt = $self->_add_index_wa_routines($name1, $index, "ALTER TABLE $name1 ADD $new_type $index ($indices2->{$index})$opts;", 'create');
+                $changes .= $index_wa_stmt . "\n";
                 my $auto = _check_for_auto_col($table2, $indices2->{$index}, 0) || '';
                 if (keys %{$self->{added_index}} && $auto) {
                     # alter column after 
@@ -1271,6 +1338,7 @@ sub _index_auto_col {
     if (!($field =~ /\(.*?\)/)) {
         $field = '(' . $field . ')';
     }
+
     my $changes = "ALTER TABLE $name ADD INDEX $auto_index_name $field;";
     $changes .= " # auto columns must always be indexed"
                         unless $comment;

@@ -57,6 +57,10 @@ flow messages and 4 providing data dumps, etc where appropriate.
 Writes to debug log file (if specified) and STDERR the given message, provided
 is equal to or lower than the current debug level.
 
+=item * generate_random_string
+
+Generates random string of 5 characters
+
 =item * set_save_quotes
 
 Save choice about save saving quotes
