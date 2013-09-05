@@ -1128,6 +1128,12 @@ sub _diff_indices {
                 }
                 push @changes, [$changes, {'k' => $weight}];
             }
+            if ($is_fk) {
+                # if there is already key for FK, or it is not dropped yet (will be dropped after), we need to try create index 
+                $index_wa_stmt = $self->_add_index_wa_routines($name1, $index, "ALTER TABLE $name1 ADD $new_type $index ($indices2->{$index})$opts;", 'create');
+                $changes .= $index_wa_stmt . "\n";
+                push @changes, [$changes, {'k' => $weight}];
+            }
         }
     }
 
