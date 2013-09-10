@@ -254,7 +254,7 @@ CREATE_STMT
                 if ( ($r_opts1 ne $r_opts2) || ($r_body1 ne $r_body2) || ($r_pars1 ne $r_pars2) ) {
                     write_log($r_type.'_'.$name.'.sql', "Options 1: $r_opts1\nOptions 2: $r_opts2\nBody 1: $r_body1\nBody 2: $r_body2\nParams 1: $r_pars1\nParams 2: $r_pars2");
                     my $change = $self->add_header($routine1, "change_routine") unless !$self->{opts}{'list-tables'};
-                    $change .= "DROP $r_type $name;\n";
+                    $change .= "DROP $r_type IF EXISTS $name;\n";
                     $change .= "DELIMITER ;;\n";
                     $change .= $routine2->def() . ";;\n";
                     $change .= "DELIMITER ;\n";
@@ -265,7 +265,7 @@ CREATE_STMT
                 debug(1, "$r_type '$name' dropped;");
                 my $change = '';
                 $change = $self->add_header($routine1, "drop_routine") unless !$self->{opts}{'list-tables'};
-                $change .= "DROP $r_type $name;\n";
+                $change .= "DROP $r_type IF EXISTS $name;\n";
                 push @changes, [$change, {'k' => 5}]                 
                          unless $self->{opts}{'only-both'} || $self->{opts}{'keep-old-tables'}; 
             }
