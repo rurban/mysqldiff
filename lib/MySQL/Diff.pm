@@ -483,6 +483,7 @@ EOF
 
 sub _diff_tables {
     my $self = shift;
+    $self->{changed_pk_auto_col} = 0;
     $self->{added_pk} = 0;
     $self->{dropped_columns} = {};
     $self->{added_index} = {};
@@ -601,12 +602,17 @@ sub _diff_fields {
                                 }
                             }
                         } else {
-                            if ($f2 =~ /DEFAULT NULL/is) {
-                                # we must to change this column later, if it was PK in table in first database
-                                # otherwise, it will be not 'DEFAULT NULL', but, for example, for INT column "NOT NULL DEFAULT '0'"
-                                if ($table1->isa_primary($field)) {
+                            if ($table1->isa_primary($field)) {
+                                if ($f2 =~ /DEFAULT NULL/is) {
+                                    # we must to change this column later, if it was PK in table in first database
+                                    # otherwise, it will be not 'DEFAULT NULL', but, for example, for INT column "NOT NULL DEFAULT '0'"
                                     debug(3, "executing DEFAULT NULL change later for field '$field', because it was PK");
-                                    $weight = 3; 
+                                    $weight = 3;    
+                                }
+                                if ($f1 =~ /AUTO_INCREMENT/is) {
+                                    # now we need to just change this column when drop primary key
+                                    $self->{changed_pk_auto_col} = 1;
+                                    debug(3, "executing DEFAULT NULL change later for field '$field', because it was PK, when PK will be dropped");
                                 }
                             }
                         }  
@@ -617,15 +623,19 @@ sub _diff_fields {
                             $self->{added_index}{is_new} = 0;
                         }
                         my $change = '';
-                        $change =  $self->add_header($table2, "change_column") unless !$self->{opts}{'list-tables'};
-                        $change .= "ALTER TABLE $name1 CHANGE COLUMN $field $field $f2$pk;";
-                        $change .= " # was $f1" unless $self->{opts}{'no-old-defs'};
-                        $change .= "\n";
-                        if ($f2 =~ /(CURRENT_TIMESTAMP(?:\(\))?|NOW\(\)|LOCALTIME(?:\(\))?|LOCALTIMESTAMP(?:\(\))?)/) {
-                                $weight = 1;
+                        if (!$self->{changed_pk_auto_col}) {
+                            $change =  $self->add_header($table2, "change_column") unless !$self->{opts}{'list-tables'};
+                            $change .= "ALTER TABLE $name1 CHANGE COLUMN $field $field $f2$pk;";
+                            $change .= " # was $f1" unless $self->{opts}{'no-old-defs'};
+                            $change .= "\n";
+                            if ($f2 =~ /(CURRENT_TIMESTAMP(?:\(\))?|NOW\(\)|LOCALTIME(?:\(\))?|LOCALTIMESTAMP(?:\(\))?)/) {
+                                    $weight = 1;
+                            }
+                            # column must be changed/added first
+                            push @changes, [$change, {'k' => $weight}];   
+                        } else {
+                            $self->{changed_pk_auto_col} = "CHANGE COLUMN $field $field $f2$pk;";
                         }
-                        # column must be changed/added first
-                        push @changes, [$change, {'k' => $weight}];   
                     }
                 } 
                 #else {
@@ -1201,7 +1211,12 @@ sub _diff_primary_key {
         # If PK's column(s) ALL was dropped, we mustn't drop itself; for auto columns we already create indexes
         if (!$pk_ops) {
             debug(2, "PK $primary1 was dropped");
-            $changes .= "ALTER TABLE $name1 DROP PRIMARY KEY;";
+            $changes .= "ALTER TABLE $name1 DROP PRIMARY KEY";
+            if ($self->{changed_pk_auto_col}) {
+                $changes .= ', ' . $self->{changed_pk_auto_col}; 
+            } else {
+                $changes .= ';';
+            }
             $changes .= " # was $primary1" unless $self->{opts}{'no-old-defs'};
             $changes .= "\n";
         }
