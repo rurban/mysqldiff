@@ -486,6 +486,7 @@ sub _diff_tables {
     $self->{changed_pk_auto_col} = 0;
     $self->{added_pk} = 0;
     $self->{dropped_columns} = {};
+    $self->{changed_to_empty_char_col} = {};
     $self->{added_index} = {};
     $self->{added_for_fk} = {};
     $self->{fk_for_pk} = {};
@@ -623,6 +624,11 @@ sub _diff_fields {
                             $self->{added_index}{is_new} = 0;
                         }
                         my $change = '';
+                        if ($f2 =~ /CHAR\s*\(0\)/is) {
+                            debug(3, "field $field is changed to CHAR(0)");
+                            $self->{changed_to_empty_char_col}{'field'}  = $field;
+                            $self->{changed_to_empty_char_col}{'weight'} = $weight;
+                        } 
                         if (!$self->{changed_pk_auto_col}) {
                             $change =  $self->add_header($table2, "change_column") unless !$self->{opts}{'list-tables'};
                             $change .= "ALTER TABLE $name1 CHANGE COLUMN $field $field $f2$pk;";
@@ -1004,6 +1010,7 @@ sub _diff_indices {
                     }
                 }
                 my $index_parts = $table1->indices_parts($index);
+                my $is_empty_change = 0;
                 if ($index_parts) {
                     for my $index_part (keys %$index_parts) {
                         if ($is_fk) {
@@ -1025,6 +1032,9 @@ sub _diff_indices {
                                 $self->{temporary_indexes}{$temp_index_name} = $index_part;
                                 $changes .= "ALTER TABLE $name1 ADD INDEX $temp_index_name ($index_part);\n";
                             }
+                        }
+                        if ($self->{changed_to_empty_char_col}{'field'} && ($self->{changed_to_empty_char_col}{'field'} eq $index_part)) {
+                            $weight = $self->{changed_to_empty_char_col}{'weight'} + 1;
                         }
                     }
                 }
