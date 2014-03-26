@@ -22,7 +22,7 @@ the second.
 
 use warnings;
 
-our $VERSION = '0.49';
+our $VERSION = '0.50';
 
 # ------------------------------------------------------------------------------
 # Libraries
@@ -485,12 +485,15 @@ sub _diff_tables {
     my $self = shift;
     $self->{changed_pk_auto_col} = 0;
     $self->{added_pk} = 0;
+    $self->{added_pk_col} = 0;
     $self->{dropped_columns} = {};
     $self->{changed_to_empty_char_col} = {};
     $self->{added_index} = {};
     $self->{added_for_fk} = {};
     $self->{fk_for_pk} = {};
     $self->{temporary_indexes} = {};
+    $self->{added_cols} = {};
+    $self->{timestamps} = {};
     my @changes = $self->_diff_fields(@_);
     push @changes, $self->_diff_indices(@_);
     push @changes, $self->_diff_primary_key(@_);
@@ -680,9 +683,11 @@ sub _diff_fields {
                 debug(2,"field '$field' added");
                 my $field_links = $table2->fields_links($field);
                 my $position = ' FIRST';
+                my $prev_field;
+                my $prev_field_links;
                 if ($field_links->{'prev_field'}) {
-                    my $prev_field = $field_links->{'prev_field'};
-                    my $prev_field_links = $table1->fields_links($prev_field);
+                    $prev_field = $field_links->{'prev_field'};
+                    $prev_field_links  = $table1->fields_links($prev_field);
                     if (!$prev_field_links) {
                         $prev_field_links = $table2->fields_links($prev_field);
                     }
@@ -701,18 +706,18 @@ sub _diff_fields {
                         }
                     } else {
                         # it is last field, so we must not use "after" clause
-                        $position = '';
+                        $position = '';   
                     }
                 }
                 $weight = 5;
                 # MySQL condition for timestamp fields
                 if ($fields2->{$field} =~ /(CURRENT_TIMESTAMP(?:\(\))?|NOW\(\)|LOCALTIME(?:\(\))?|LOCALTIMESTAMP(?:\(\))?)/) {
+                    $self->{timestamps}{$field} = 1;
                     $weight = 1;
-
-                    $alters->{$field} = _add_routine_alters($field, $field_links, $table2);
+                    $alters->{$field} = $self->_add_routine_alters($field, $field_links, $table2);
                     if ($alters->{$field}) {
-                        debug(3, 'repeat change columns after timestamp column');
                         $after_ts = 1;
+                        debug(3, "repeat change columns for '$field' after timestamp column");
                     }
                 }
                 debug(3, "field '$field' added at position: $position") if ($position);
@@ -728,6 +733,7 @@ sub _diff_fields {
                             $header_text = 'add_pk';
                             # Flag we add PK's column(s)
                             $self->{added_pk} = 1;
+                            $self->{added_pk_col} = $field;
                         } else {
                             # This way, we can to add PRIMARY KEY __operator__ when last part of PK was obtained
                             debug(3, "field $field is a part of composite primary key");
@@ -739,9 +745,10 @@ sub _diff_fields {
                                 $header_text = 'add_pk';
                                 # Flag we add PK's column(s)
                                 $self->{added_pk} = 1;
+                                $self->{added_pk_col} = $field;
                             }
                         }
-                        $alters->{$field} = _add_routine_alters($field, $field_links, $table2);
+                        $alters->{$field} = $self->_add_routine_alters($field, $field_links, $table2);
                 }
                 
                 my $fks_for_added = $table2->get_fk_by_col($field);
@@ -763,7 +770,15 @@ sub _diff_fields {
                 my $change = '';
                 $change =  $self->add_header($table2, $header_text) unless !$self->{opts}{'list-tables'};
                 $change .= "ALTER TABLE $name1 ADD COLUMN $field $field_description$pk;\n";
+                $self->{added_cols}{$field} = 1;
+                if ($prev_field && $prev_field_links && $self->{timestamps}{$prev_field} && !$self->{timestamps}{$field}) {
+                    # if last column is not timestamp column itself, and it was added after timestamp column, 
+                    # we need to create "AFTER" because timestamp added with weight = 1
+                    my $ts_alters = $self->_add_routine_alters($prev_field, $prev_field_links, $table2);
+                    push @changes, [$ts_alters, {'k' => 1}];
+                } 
                 if (!$alters->{$field}) {
+                    # flag we already have ALTER for field
                     $alters->{$field} = 1;
                 } else {
                     $change .= $alters->{$field};
@@ -778,13 +793,15 @@ sub _diff_fields {
 }
 
 sub _add_routine_alters {
-    my ($current_field, $field_links, $table) = @_;
+    my ($self, $current_field, $field_links, $table) = @_;
     my $res = '';
     my $fields = $table->fields;
     my $name = $table->name;
     while ($field_links->{'next_field'}) {
         my $next_field = $field_links->{'next_field'};
-        $res .= "ALTER TABLE $name CHANGE COLUMN $next_field $next_field $fields->{$next_field} AFTER $current_field;\n";
+        if ($self->{added_cols}{$next_field}) {
+            $res .= "ALTER TABLE $name CHANGE COLUMN $next_field $next_field $fields->{$next_field} AFTER $current_field;\n";   
+        }
         $field_links = $table->fields_links($next_field);
         $current_field = $next_field;
     }
@@ -900,15 +917,21 @@ sub _diff_indices {
                     if ($index_parts) {
                         for $index_part (keys %$index_parts) {
                             my $fks = $table2->get_fk_by_col($index_part) || $table1->get_fk_by_col($index_part);
-                            if ($fks) {
+                            my $field_index_part = $table2->field($index_part);
+                            if ($fks && $field_index_part) {
+                                # now we can to check, if FK was deleted, etc. Instead of this, we can just to try create temp index 
                                 my $temp_index_name = "temp_".md5_hex($index_part);
                                 if (!$self->{temporary_indexes}{$temp_index_name}) {
                                     debug(3, "Added temporary index $temp_index_name for INDEX's field $index_part because there is FKs for this field");
                                     $self->{temporary_indexes}{$temp_index_name} = $index_part;
-                                    $changes .= "ALTER TABLE $name1 ADD INDEX $temp_index_name ($index_part);\n";
+                                    $changes .= $self->_add_index_wa_routines(
+                                            $name1, 
+                                            $temp_index_name, 
+                                            "ALTER TABLE $name1 ADD INDEX $temp_index_name ($index_part);", 
+                                            'create'
+                                    ) . "\n";
                                 }
                             }
-                            my $field_index_part = $table2->field($index_part);
                             if ($field_index_part && ($field_index_part =~ /(CURRENT_TIMESTAMP(?:\(\))?|NOW\(\)|LOCALTIME(?:\(\))?|LOCALTIMESTAMP(?:\(\))?)/)) {
                                 $weight = 1;
                                 $is_timestamp = 1;
@@ -917,6 +940,7 @@ sub _diff_indices {
                     }
                     # check index part of this index is second table is its timestamp column
                     $index_parts = $table2->indices_parts($index);
+                    my $added_pk_index_weight = 0;
                     if ($index_parts) {
                         for $index_part (keys %$index_parts) {
                             if ($is_fk) {
@@ -927,7 +951,15 @@ sub _diff_indices {
                                     $rc_index_name = "rc_temp_".md5_hex($index_part)."_change";
                                     $self->{temporary_indexes}{$rc_index_name} = $index_part;
                                     debug(3, "Added temporary index $rc_index_name for INDEX's field $index_part because there is FK for this field in SECOND table and index $index has same name as FK");
-                                    push @changes, ["ALTER TABLE $name1 ADD INDEX $rc_index_name ($index_part);\n", {'k' => $self->{added_for_fk}{$index} ? 5 : 6}]; 
+                                    if ($self->{added_pk_col} eq $index_part) {
+                                        $added_pk_index_weight = 1;
+                                    } else {
+                                        $added_pk_index_weight = $self->{added_for_fk}{$index} ? 5 : 6;
+                                    }
+                                    if ($self->{opts}{'list-tables'}) {
+                                        push @changes, [$self->add_header($table2, "change_index"), {'k' => $added_pk_index_weight}];    
+                                    }
+                                    push @changes, ["ALTER TABLE $name1 ADD INDEX $rc_index_name ($index_part);\n", {'k' => $added_pk_index_weight}]; 
                                 }
                             }
                             if ($table2->field($index_part) =~ /(CURRENT_TIMESTAMP(?:\(\))?|NOW\(\)|LOCALTIME(?:\(\))?|LOCALTIMESTAMP(?:\(\))?)/) {
@@ -939,7 +971,9 @@ sub _diff_indices {
                     # do the step 2
                     if ($need_drop) {
                         debug(3, "drop index $index to change it later FK changing");
-                        $index_wa_stmt = $self->_add_index_wa_routines($name1, $index, "ALTER TABLE $name1 DROP INDEX $index;", 'drop');
+                        $index_wa_stmt = '';
+                        $index_wa_stmt = $self->add_header($table1, "drop_wa_index") unless !$self->{opts}{'list-tables'};
+                        $index_wa_stmt .= $self->_add_index_wa_routines($name1, $index, "ALTER TABLE $name1 DROP INDEX $index;", 'drop');
                         push @changes, [$index_wa_stmt . "\n", {'k' => $self->{added_for_fk}{$index} ? 5 : 6}]; 
                     }                    
                     if ($is_timestamp) {
@@ -983,7 +1017,7 @@ sub _diff_indices {
                         # reset added index description
                         $self->{added_index} = {};
                     }
-                    push @changes, [$changes, {'k' => $weight}]; 
+                    push @changes, [$changes, {'k' => $added_pk_index_weight ? $added_pk_index_weight : $weight}]; 
                 }
             } else {
                 my $auto = _check_for_auto_col($table2, $indices1->{$index}, 0) || '';
