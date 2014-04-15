@@ -22,7 +22,7 @@ the second.
 
 use warnings;
 
-our $VERSION = '0.50';
+our $VERSION = '0.51';
 
 # ------------------------------------------------------------------------------
 # Libraries
@@ -901,7 +901,7 @@ sub _diff_indices {
                     $auto_increment_check = $auto  ? 1 : 0;
                     my $changes = '';
                     $changes = $self->add_header($table2, "change_index") unless !$self->{opts}{'list-tables'};
-                    $changes .= $auto ? _index_auto_col($table1, $indices1->{$index}, $self->{opts}{'no-old-defs'}) : '';
+                    $changes .= $auto ? $self->_index_auto_col($table1, $indices1->{$index}, $self->{opts}{'no-old-defs'}) : '';
                     if ($auto) {
                         my $auto_index_name = "mysqldiff_".md5_hex($name1."_".$auto);
                         debug(3, "Auto column $auto indexed with index called $auto_index_name");
@@ -959,7 +959,10 @@ sub _diff_indices {
                                     if ($self->{opts}{'list-tables'}) {
                                         push @changes, [$self->add_header($table2, "change_index"), {'k' => $added_pk_index_weight}];    
                                     }
-                                    push @changes, ["ALTER TABLE $name1 ADD INDEX $rc_index_name ($index_part);\n", {'k' => $added_pk_index_weight}]; 
+                                    push @changes, [
+                                        $self->_add_index_wa_routines($name1, $rc_index_name, "ALTER TABLE $name1 ADD INDEX $rc_index_name ($index_part);", 'create') . "\n", 
+                                        {'k' => $added_pk_index_weight}
+                                    ]; 
                                 }
                             }
                             if ($table2->field($index_part) =~ /(CURRENT_TIMESTAMP(?:\(\))?|NOW\(\)|LOCALTIME(?:\(\))?|LOCALTIMESTAMP(?:\(\))?)/) {
@@ -1029,7 +1032,7 @@ sub _diff_indices {
                 $auto_increment_check = $auto ? 1 : 0;
                 my $changes = '';
                 $changes = $self->add_header($table1, "drop_index") unless !$self->{opts}{'list-tables'};
-                $changes .= $auto ? _index_auto_col($table1, $indices1->{$index}, $self->{opts}{'no-old-defs'}) : '';
+                $changes .= $auto ? $self->_index_auto_col($table1, $indices1->{$index}, $self->{opts}{'no-old-defs'}) : '';
                 if ($auto) {
                     my $auto_index_name = "mysqldiff_".md5_hex($name1."_".$auto);
                     debug(3, "Auto column $auto indexed with index called $auto_index_name");
@@ -1055,7 +1058,10 @@ sub _diff_indices {
                                 $rc_index_name = "rc_temp_".md5_hex($index_part)."_drop";
                                 $self->{temporary_indexes}{$rc_index_name} = $index_part;
                                 debug(3, "Added temporary index $rc_index_name for INDEX's field $index_part in drop index condition because there is FK for this field in SECOND table and index $index has same name as FK");
-                                push @changes, ["ALTER TABLE $name1 ADD INDEX $rc_index_name ($index_part);\n", {'k' => $self->{added_for_fk}{$index} ? 5 : 6}]; 
+                                push @changes, [
+                                    $self->_add_index_wa_routines($name1, $index, "ALTER TABLE $name1 ADD INDEX $rc_index_name ($index_part);", 'create') . "\n", 
+                                    {'k' => $self->{added_for_fk}{$index} ? 5 : 6}
+                                ]; 
                             }
                         }
                         my $fks = $table2->get_fk_by_col($index_part) || $table1->get_fk_by_col($index_part);
@@ -1064,7 +1070,7 @@ sub _diff_indices {
                             if (!$self->{temporary_indexes}{$temp_index_name}) {
                                 debug(3, "Added temporary index $temp_index_name for INDEX's field $index_part because there is FKs for this field");
                                 $self->{temporary_indexes}{$temp_index_name} = $index_part;
-                                $changes .= "ALTER TABLE $name1 ADD INDEX $temp_index_name ($index_part);\n";
+                                $changes .= $self->_add_index_wa_routines($name1, $temp_index_name, "ALTER TABLE $name1 ADD INDEX $temp_index_name ($index_part);", 'create') . "\n";
                             }
                         }
                         if ($self->{changed_to_empty_char_col}{'field'} && ($self->{changed_to_empty_char_col}{'field'} eq $index_part)) {
@@ -1145,7 +1151,7 @@ sub _diff_indices {
                         my $temp_index_name = "rc_temp_".md5_hex($ip)."_add";
                         debug(3, "need recreate index $index, add temporary index $temp_index_name for $ip");
                         $self->{temporary_indexes}{$temp_index_name} = $ip;
-                        $changes .= "ALTER TABLE $name1 ADD INDEX $temp_index_name ($ip);\n";
+                        $changes .= $self->_add_index_wa_routines($name1, $temp_index_name, "ALTER TABLE $name1 ADD INDEX $temp_index_name ($ip);", 'create') . "\n";
                         $need_recreate = 1;
                     }
                 }
@@ -1159,7 +1165,10 @@ sub _diff_indices {
                 }
             }
             
+            my $tmp_changes = $changes;
+            $changes = '';
             $changes = $self->add_header($table2, "add_index") unless !$self->{opts}{'list-tables'};
+            $changes .= $tmp_changes;
             if ($need_recreate) {
                 debug(3, "drop index $index to recreate it");
                 $index_wa_stmt = $self->_add_index_wa_routines($name1, $index, "ALTER TABLE $name1 DROP INDEX $index;", 'drop');
@@ -1182,7 +1191,7 @@ sub _diff_indices {
                 }
                 push @changes, [$changes, {'k' => $weight}];
             }
-            if ($is_fk) {
+            if ($is_fk && !$need_recreate) {
                 # if there is already key for FK, or it is not dropped yet (will be dropped after), we need to try create index 
                 $index_wa_stmt = $self->_add_index_wa_routines($name1, $index, "ALTER TABLE $name1 ADD $new_type $index ($indices2->{$index})$opts;", 'create');
                 $changes .= $index_wa_stmt . "\n";
@@ -1223,7 +1232,7 @@ sub _diff_primary_key {
     if ( ($primary1 && !$primary2) || ($primary1 ne $primary2) ) {
         debug(2, "primary key difference detected");
         my $auto = _check_for_auto_col($table2, $primary1) || '';
-        $changes .= $auto ? _index_auto_col($table2, $auto, $self->{opts}{'no-old-defs'}) : '';
+        $changes .= $auto ? $self->_index_auto_col($table2, $auto, $self->{opts}{'no-old-defs'}) : '';
         if ($auto) {
             debug(3, "Auto column $auto indexed");
             my $auto_index_name = "mysqldiff_".md5_hex($name1."_".$auto);
@@ -1248,7 +1257,7 @@ sub _diff_primary_key {
                 if (!$self->{temporary_indexes}{$temp_index_name}) {
                     debug(3, "Added temporary index $temp_index_name for PK's field $pk because there is FKs for this field");
                     $self->{temporary_indexes}{$temp_index_name} = $pk;
-                    $changes .= "ALTER TABLE $name1 ADD INDEX $temp_index_name ($pk);\n";
+                    $changes .= $self->_add_index_wa_routines($name1, $temp_index_name, "ALTER TABLE $name1 ADD INDEX $temp_index_name ($pk);", 'create') . "\n";
                 }
             }
         }
@@ -1397,7 +1406,7 @@ sub _check_for_auto_col {
 }
 
 sub _index_auto_col {
-    my ($table, $field, $comment) = @_;
+    my ($self, $table, $field, $comment) = @_;
     my $name = $table->name;
     my $auto_index_name = "mysqldiff_".md5_hex($name."_".$field);
     if (!($field =~ /\(.*?\)/)) {
@@ -1407,7 +1416,7 @@ sub _index_auto_col {
     my $changes = "ALTER TABLE $name ADD INDEX $auto_index_name $field;";
     $changes .= " # auto columns must always be indexed"
                         unless $comment;
-    return $changes. "\n";
+    return $self->_add_index_wa_routines($name, $auto_index_name, $changes, 'create') . "\n";
 }
 
 sub _diff_options {
@@ -1424,7 +1433,7 @@ sub _diff_options {
             } else {
                 debug(3, "Dropped temporary index $temporary_index");
                 $change .= $self->add_header($table1, 'drop_temporary_index') unless !$self->{opts}{'list-tables'};
-                $change .= "ALTER TABLE $name DROP INDEX $temporary_index;\n";
+                $change .= $self->_add_index_wa_routines($name, $temporary_index, "ALTER TABLE $name DROP INDEX $temporary_index;", 'drop') . "\n";
             }
         }
     }
