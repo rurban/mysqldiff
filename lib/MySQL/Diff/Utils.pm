@@ -156,19 +156,21 @@ $log_dir. '/dump_' . time() . '_' . generate_random_string()
         my ($filename, $content, $append) = @_;
         if ($log_dir && $filename && $content) {
             my @chars=('a'..'z','A'..'Z','0'..'9','_');
+            my $log;
             if (!$random_string) {
                 $random_string = $log_dir. '/dump_' . time() . '_' . generate_random_string();
                 mkdir $random_string
             }
             $filename = $random_string . '/' . $filename ;
             if ($append) {
-                open(LOG_FILE, '>>'.$filename);
+                open $log, '>>', $filename;
             } else {
-                open(LOG_FILE, '>'.$filename);
+                open $log, '>', $filename;
             }
-            print LOG_FILE $content;
-            close (LOG_FILE);
+            print $log $content;
+            close $log;
         }
+        return;
     }
     
 }

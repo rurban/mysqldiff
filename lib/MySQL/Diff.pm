@@ -59,10 +59,10 @@ sub new {
     bless $self, ref $class || $class;
 
     $self->{opts} = \%hash;
-    
+
     if($hash{debug})        { debug_level($hash{debug})     ; delete $hash{debug};      }
     if($hash{debug_file})   { debug_file($hash{debug_file}) ; delete $hash{debug_file}; }
-    
+
     if ($hash{'save-quotes'}) {
         set_save_quotes($hash{'save-quotes'});
     }
@@ -201,7 +201,7 @@ CREATE_STMT
         debug(1, "looking at table '$name' in first database");
         debug(6, "table 1 $name = ".Dumper($table1));
         if (!$self->{opts}{'refs'}) {
-            $self->{'used_tables'}{$name} = 1;       
+            $self->{'used_tables'}{$name} = 1;
             if (my $table2 = $self->db2->table_by_name($name)) {
                 debug(1,"comparing tables called '$name'");
                 push @changes, $self->_diff_tables($table1, $table2);
@@ -215,7 +215,7 @@ CREATE_STMT
                     my $change = '';
                     $change = $self->_add_header($table1, "drop_table") unless !$self->{opts}{'list-tables'};
                     $change .= "DROP TABLE $name;\n\n";
-                    push @changes, [$change, {'k' => 8}]                 
+                    push @changes, [$change, {'k' => 8}]
                         unless $self->{opts}{'only-both'} || $self->{opts}{'keep-old-tables'}; # drop table after all
                 }
             }
@@ -248,23 +248,24 @@ CREATE_STMT
                 my $r_pars1 = $routine1->params();
                 my $r_pars2 = $routine2->params();
                 if ( ($r_opts1 ne $r_opts2) || ($r_body1 ne $r_body2) || ($r_pars1 ne $r_pars2) ) {
+                    my $change;
                     write_log($r_type.'_'.$name.'.sql', "Options 1: $r_opts1\nOptions 2: $r_opts2\n".
                               "Body 1: $r_body1\nBody 2: $r_body2\nParams 1: $r_pars1\nParams 2: $r_pars2");
-                    my $change = $self->_add_header($routine1, "change_routine") unless !$self->{opts}{'list-tables'};
+                    $change = $self->_add_header($routine1, "change_routine") unless !$self->{opts}{'list-tables'};
                     $change .= "DROP $r_type IF EXISTS $name;\n";
                     $change .= "DELIMITER ;;\n";
                     $change .= $routine2->def() . ";;\n";
                     $change .= "DELIMITER ;\n";
-                    push @changes, [$change, {'k' => 5}]                 
-                            unless $self->{opts}{'only-both'} || $self->{opts}{'keep-old-tables'}; 
+                    push @changes, [$change, {'k' => 5}]
+                            unless $self->{opts}{'only-both'} || $self->{opts}{'keep-old-tables'};
                 }
             } else {
                 debug(1, "$r_type '$name' dropped;");
                 my $change = '';
                 $change = $self->_add_header($routine1, "drop_routine") unless !$self->{opts}{'list-tables'};
                 $change .= "DROP $r_type IF EXISTS $name;\n";
-                push @changes, [$change, {'k' => 5}]                 
-                         unless $self->{opts}{'only-both'} || $self->{opts}{'keep-old-tables'}; 
+                push @changes, [$change, {'k' => 5}]
+                         unless $self->{opts}{'only-both'} || $self->{opts}{'keep-old-tables'};
             }
         }
     }
@@ -284,24 +285,24 @@ CREATE_STMT
 
                     if ( ($f1 ne $f2) || 
                          ($sel1 ne $sel2) || 
-                         ($opts1->{'security'} ne $opts2->{'security'}) || 
-                         ($opts1->{'trail'} ne $opts2->{'trail'}) || 
-                         ($opts1->{'algorithm'} ne $opts2->{'algorithm'}) 
+                         ($opts1->{'security'} ne $opts2->{'security'}) ||
+                         ($opts1->{'trail'} ne $opts2->{'trail'}) ||
+                         ($opts1->{'algorithm'} ne $opts2->{'algorithm'})
                        ) {
                         my $change = '';
                         $change = $self->_add_header($view1, "change_view") unless !$self->{opts}{'list-tables'};
                         $change .= "ALTER ALGORITHM=$opts2->{'algorithm'} DEFINER=CURRENT_USER SQL SECURITY ".
                           "$opts2->{'security'} VIEW $name $f2 AS ($sel2) $opts2->{'trail'};\n";
-                        push @changes, [$change, {'k' => 5}]                 
-                            unless $self->{opts}{'only-both'} || $self->{opts}{'keep-old-tables'}; 
+                        push @changes, [$change, {'k' => 5}]
+                            unless $self->{opts}{'only-both'} || $self->{opts}{'keep-old-tables'};
                     }
                 } else {
                     debug(1, "view '$name' dropped");
                     my $change = '';
                     $change = $self->_add_header($view1, "drop_view") unless !$self->{opts}{'list-tables'};
                     $change .= "DROP VIEW $name;\n\n";
-                    push @changes, [$change, {'k' => 6}]                 
-                         unless $self->{opts}{'only-both'} || $self->{opts}{'keep-old-tables'}; 
+                    push @changes, [$change, {'k' => 6}]
+                         unless $self->{opts}{'only-both'} || $self->{opts}{'keep-old-tables'};
                 }
         }
     }
@@ -385,7 +386,7 @@ CREATE_STMT
         }
         my @sorted = sort { return $b->[1]->{'k'} cmp $a->[1]->{'k'} } @changes;
         my $column_index = 0;
-        my $line = join '', map $_->[$column_index], @sorted;
+        my $line = join('', map { $_->[$column_index] } @sorted);
         my $wa_name = $self->{index_wa}{'name'};
         if ($self->{index_wa}{'used'}) {
             $out .= $self->_add_header($wa_name . '_create', 'create_workaround', 0, 1);
@@ -421,7 +422,7 @@ sub _add_ref_tables {
                     my $additional_tables = '';
                     my $additional_fk_tables = $table->fk_tables();
                     if ($additional_fk_tables) {
-                            push @changes, $self->_add_ref_tables($additional_fk_tables);
+                        push @changes, $self->_add_ref_tables($additional_fk_tables);
                     }
                     my $change = '';
                     if (!$self->{opts}{'refs'}) {
@@ -432,16 +433,16 @@ sub _add_ref_tables {
                     }
                     push @changes, [$change, {'k' => 6}];
                     if (!$self->{opts}{'refs'}) {
-                            if (!$self->{opts}{'only-both'}) {
-                                    my $fks = $table->foreign_key();
-                                    for my $fk (keys %$fks) {
-                                        debug(3, "FK $fk for created table $name added");
-                                        $change = '';
-                                        $change = $self->_add_header($table, 'add_fk') unless !$self->{opts}{'list-tables'};
-                                        $change .= "ALTER TABLE $name ADD CONSTRAINT $fk FOREIGN KEY $fks->{$fk};\n";
-                                        push @changes, [$change, {'k' => 1}];
-                                    }
+                        if (!$self->{opts}{'only-both'}) {
+                            my $fks = $table->foreign_key();
+                            for my $fk (keys %$fks) {
+                                debug(3, "FK $fk for created table $name added");
+                                $change = '';
+                                $change = $self->_add_header($table, 'add_fk') unless !$self->{opts}{'list-tables'};
+                                $change .= "ALTER TABLE $name ADD CONSTRAINT $fk FOREIGN KEY $fks->{$fk};\n";
+                                push @changes, [$change, {'k' => 1}];
                             }
+                        }
                     }
                 }
             }
@@ -492,7 +493,7 @@ sub _diff_tables {
     push @changes, $self->_diff_indices(@_);
     push @changes, $self->_diff_primary_key(@_);
     push @changes, $self->_diff_foreign_key(@_);
-    push @changes, $self->_diff_options(@_);    
+    push @changes, $self->_diff_options(@_);
 
     $changes[-1][0] =~ s/\n*$/\n/  if (@changes);
     return @changes;
@@ -513,7 +514,7 @@ sub _diff_fields {
     # parts of primary key in table 2
     my $pp = $table2->primary_parts();
     # size of parts (1 in case key is non-composite)
-    my $size = scalar keys %$pp; 
+    my $size = scalar keys %$pp;
     my $diff_hash = {};
     # get columns from primary key parts that not presented in table1's fields list (it will be added)
     foreach (keys %$pp) {
@@ -523,9 +524,15 @@ sub _diff_fields {
     my $f_last;
     my @d_keys;
     if (keys %$diff_hash) {
-        @d_keys = sort { ($fields2->{$a}=~/\s*AUTO_INCREMENT\s*/is) cmp ($fields2->{$b}=~/\s*AUTO_INCREMENT\s*/is)} keys %$diff_hash;
+        @d_keys = sort {
+            ($fields2->{$a}=~/\s*AUTO_INCREMENT\s*/is) cmp
+            ($fields2->{$b}=~/\s*AUTO_INCREMENT\s*/is)
+        } keys %$diff_hash;
     } else {
-        @d_keys = sort { ($fields2->{$a}=~/\s*AUTO_INCREMENT\s*/is) cmp ($fields2->{$b}=~/\s*AUTO_INCREMENT\s*/is)} keys %$pp;
+        @d_keys = sort {
+            ($fields2->{$a}=~/\s*AUTO_INCREMENT\s*/is) cmp
+            ($fields2->{$b}=~/\s*AUTO_INCREMENT\s*/is)
+        } keys %$pp;
     }
     $f_last = (@d_keys)[-1];
     debug(3, "Last PK: $f_last") if ($f_last);
@@ -533,16 +540,14 @@ sub _diff_fields {
     if($fields1) {
         # get list of table1's fields sorted on the basis of availability AUTO_INCREMENT clause IN TABLE 2 and, then, on PROPERLY order of fields
         my $order1 = $table1->fields_order();
-        my @keys = sort { 
+        my @keys = sort {
             (
-                ($fields2 && $fields2->{$a} && $fields2->{$b}) &&
-                (
-                        ($fields2->{$a}=~/\s*AUTO_INCREMENT\s*/is) cmp 
-                        ($fields2->{$b}=~/\s*AUTO_INCREMENT\s*/is)
-                )
-            ) 
-            || 
-            ($order1->{$a} <=> $order1->{$b})
+             ($fields2 && $fields2->{$a} && $fields2->{$b}) &&
+             (
+              ($fields2->{$a}=~/\s*AUTO_INCREMENT\s*/is) cmp
+              ($fields2->{$b}=~/\s*AUTO_INCREMENT\s*/is)
+             )
+            ) || ($order1->{$a} <=> $order1->{$b})
         } keys %$fields1;
         my $alters;
         for my $field (@keys) {
@@ -572,7 +577,8 @@ sub _diff_fields {
                             } else {
                                 # otherwise, add PRIMARY KEY clause/operator:
                                 # if there wasn't PK, it will be created HERE
-                                # if it was, we WILL drop it (in _diff_primary_key) and create again by operator generated here.
+                                # if it was, we WILL drop it (in _diff_primary_key) and create again
+                                # by operator generated here.
                                 debug(3, "All parts of PK are exist in both tables");
                                 # if it's not PK already (in TABLE 1)
                                 if (!$table1->isa_primary($field)) {
@@ -604,18 +610,20 @@ sub _diff_fields {
                             if ($table1->isa_primary($field)) {
                                 if ($f2 =~ /DEFAULT NULL/is) {
                                     # we must to change this column later, if it was PK in table in first database
-                                    # otherwise, it will be not 'DEFAULT NULL', but, for example, for INT column "NOT NULL DEFAULT '0'"
+                                    # otherwise, it will be not 'DEFAULT NULL', but, for example,
+                                    # for INT column "NOT NULL DEFAULT '0'"
                                     debug(3, "executing DEFAULT NULL change later for field '$field', ".
                                           "because it was PK");
-                                    $weight = 3;    
+                                    $weight = 3;
                                 }
                                 if ($f1 =~ /AUTO_INCREMENT/is) {
                                     # now we need to just change this column when drop primary key
                                     $self->{changed_pk_auto_col} = 1;
-                                    debug(3, "executing DEFAULT NULL change later for field '$field', because it was PK, when PK will be dropped");
+                                    debug(3, "executing DEFAULT NULL change later for field '$field', ".
+                                          "because it was PK, when PK will be dropped");
                                 }
                             }
-                        }  
+                        }
                         # if it will not be PK, but is auto column, set flag, so auto index can be added before column changing
                         if (!$self->{added_pk} && ($f2 =~ /AUTO_INCREMENT/is)) {
                             debug(3, "field $field is auto increment, so we will add index before column changing");
@@ -627,22 +635,22 @@ sub _diff_fields {
                             debug(3, "field $field is changed to CHAR(0)");
                             $self->{changed_to_empty_char_col}{'field'}  = $field;
                             $self->{changed_to_empty_char_col}{'weight'} = $weight;
-                        } 
+                        }
                         if (!$self->{changed_pk_auto_col}) {
                             $change =  $self->_add_header($table2, "change_column") unless !$self->{opts}{'list-tables'};
                             $change .= "ALTER TABLE $name1 CHANGE COLUMN $field $field $f2$pk;";
                             $change .= " # was $f1" unless $self->{opts}{'no-old-defs'};
                             $change .= "\n";
                             if ($f2 =~ /(CURRENT_TIMESTAMP(?:\(\))?|NOW\(\)|LOCALTIME(?:\(\))?|LOCALTIMESTAMP(?:\(\))?)/) {
-                                    $weight = 1;
+                                $weight = 1;
                             }
                             # column must be changed/added first
-                            push @changes, [$change, {'k' => $weight}];   
+                            push @changes, [$change, {'k' => $weight}];
                         } else {
                             $self->{changed_pk_auto_col} = "CHANGE COLUMN $field $field $f2$pk;";
                         }
                     }
-                } 
+                }
                 #else {
                 #    if ($table2->isa_primary($field)) {
                 #        debug(3, "column '$field' is a PK in second table");
@@ -665,11 +673,12 @@ sub _diff_fields {
 
     if($fields2) {
         my $order2 = $table2->fields_order();
-        # get list of table2's fields sorted on the basis of availability AUTO_INCREMENT clause and, then, with properly order
-        my @keys = sort { 
-            ($fields2->{$a}=~/\s*AUTO_INCREMENT\s*/is) cmp ($fields2->{$b}=~/\s*AUTO_INCREMENT\s*/is) 
-            ||
-            ($order2->{$a} <=> $order2->{$b})
+        # get list of table2's fields sorted on the basis of availability AUTO_INCREMENT clause
+        # and, then, with proper sort order
+        my @keys = sort {
+            ($fields2->{$a}=~/\s*AUTO_INCREMENT\s*/is) cmp
+            ($fields2->{$b}=~/\s*AUTO_INCREMENT\s*/is)
+         || ($order2->{$a} <=> $order2->{$b})
         } keys %$fields2;
         my $alters;
         my $after_ts = 0;
@@ -693,7 +702,8 @@ sub _diff_fields {
                                 # field before was already added, so it's safe to add current field with AFTER clause
                                 $position = " AFTER $prev_field";
                             } else {
-                                $alters->{$prev_field} = "ALTER TABLE $name1 CHANGE COLUMN $field $field $fields2->{$field} AFTER $prev_field;\n";
+                                $alters->{$prev_field} =
+                                  "ALTER TABLE $name1 CHANGE COLUMN $field $field $fields2->{$field} AFTER $prev_field;\n";
                                 $position = '';
                             }
                         } else {
@@ -702,7 +712,7 @@ sub _diff_fields {
                         }
                     } else {
                         # it is last field, so we must not use "after" clause
-                        $position = '';   
+                        $position = '';
                     }
                 }
                 $weight = 5;
@@ -746,7 +756,7 @@ sub _diff_fields {
                         }
                         $alters->{$field} = $self->_add_routine_alters($field, $field_links, $table2);
                 }
-                
+
                 my $fks_for_added = $table2->get_fk_by_col($field);
                 if ($fks_for_added) {
                     for my $fk_for_added (keys %$fks_for_added) {
@@ -754,7 +764,7 @@ sub _diff_fields {
                         $self->{added_for_fk}{$fk_for_added} = $weight;
                     }
                 }
-                
+
                 my $field_description = $fields2->{$field};
                 if (!$self->{added_pk} && ($field_description =~ /AUTO_INCREMENT/is)) {
                     debug(3, "field $field is auto increment, so it will be added without auto_increment clause ".
@@ -769,7 +779,7 @@ sub _diff_fields {
                 $change .= "ALTER TABLE $name1 ADD COLUMN $field $field_description$pk;\n";
                 $self->{added_cols}{$field} = 1;
                 if ($prev_field && $prev_field_links && $self->{timestamps}{$prev_field} && !$self->{timestamps}{$field}) {
-                    # if last column is not timestamp column itself, and it was added after timestamp column, 
+                    # if last column is not timestamp column itself, and it was added after timestamp column,
                     # we need to create "AFTER" because timestamp added with weight = 1
                     my $ts_alters = $self->_add_routine_alters($prev_field, $prev_field_links, $table2);
                     push @changes, [$ts_alters, {'k' => 1}];
@@ -797,7 +807,8 @@ sub _add_routine_alters {
     while ($field_links->{'next_field'}) {
         my $next_field = $field_links->{'next_field'};
         if ($self->{added_cols}{$next_field}) {
-            $res .= "ALTER TABLE $name CHANGE COLUMN $next_field $next_field $fields->{$next_field} AFTER $current_field;\n";   
+            $res .= "ALTER TABLE $name CHANGE COLUMN $next_field $next_field ".
+                    "$fields->{$next_field} AFTER $current_field;\n";
         }
         $field_links = $table->fields_links($next_field);
         $current_field = $next_field;
@@ -844,19 +855,20 @@ sub _diff_indices {
                 $ind2_opts = $opts2->{$index};
             }
             debug(2,"$name1 had index '$index' with opts: $ind1_opts");
-            my $old_type = $table1->is_unique($index) ? 'UNIQUE' : 
+            my $old_type = $table1->is_unique($index) ? 'UNIQUE' :
                            $table1->is_fulltext($index) ? 'FULLTEXT INDEX' : 'INDEX';
-                           
+
             # if index has same name as FK in _first_ table, and there isn't FK in _second_ table,
             # so we will create DROP FK statement after and in deleting or changing index conditions
             # we will just "cover" index part columns with temporary indexes;
             # if index has same name as FK in _first_ table, and there _is_ FK in _second_ table,
-            # so we will create DROP FK and then ADD FK statements after. 
+            # so we will create DROP FK and then ADD FK statements after.
             # So we need to check all parts of index are exists in this FK - in this case, we do not need to drop index
             # _before_ FK will be created; in other case, we must to do:
             # 1. ADD INDEX rc_temp_....  - to "cover" missing index part with temporary index
-            # 2. DROP INDEX $index - to drop index before FK will be changed (it will automatically create index with this name again)
-            # 3. Wait untill FK changing statements will be added to output 
+            # 2. DROP INDEX $index - to drop index before FK will be changed
+            #    (it will automatically create index with this name again)
+            # 3. Wait untill FK changing statements will be added to output
             # 4. Do the rest of normal work (DROP $index again or change it)
             # for steps 1-2
             my $fks1 = $table1->foreign_key();
@@ -874,8 +886,8 @@ sub _diff_indices {
                 debug(3, "FK in table1 is $fks1, FK in table2 is $fks2");
                 if (!($fks1 eq $fks2)) {
                     debug(3, "index '$index' will be recreated");
-                    $is_fk = 1;  
-                } 
+                    $is_fk = 1;
+                }
             }
 
             if ($indices2 && $indices2->{$index}) {
@@ -886,9 +898,9 @@ sub _diff_indices {
                   )
                 {
                     debug(3,"index '$index' changed");
-                    my $new_type = $table2->is_unique($index) ? 'UNIQUE' : 
+                    my $new_type = $table2->is_unique($index) ? 'UNIQUE' :
                                    $table2->is_fulltext($index) ? 'FULLTEXT INDEX' : 'INDEX';
-                        
+
                     my $auto = _check_for_auto_col($table2, $indices1->{$index}, 0) || '';
                     # try to check any of index part is AUTO_INCREMENT
                     my $auto_increment_check = _check_for_auto_col($table1, $indices1->{$index}, 0) || '';
@@ -898,7 +910,7 @@ sub _diff_indices {
                     $auto_increment_check = $auto  ? 1 : 0;
                     my $changes = '';
                     $changes = $self->_add_header($table2, "change_index") unless !$self->{opts}{'list-tables'};
-                    $changes .= $auto ? $self->_index_auto_col($table1, $indices1->{$index}, 
+                    $changes .= $auto ? $self->_index_auto_col($table1, $indices1->{$index},
                                                                $self->{opts}{'no-old-defs'}) : '';
                     if ($auto) {
                         my $auto_index_name = "mysqldiff_".md5_hex($name1."_".$auto);
@@ -917,21 +929,24 @@ sub _diff_indices {
                             my $fks = $table2->get_fk_by_col($index_part) || $table1->get_fk_by_col($index_part);
                             my $field_index_part = $table2->field($index_part);
                             if ($fks && $field_index_part) {
-                                # now we can to check, if FK was deleted, etc. Instead of this, we can just to try create temp index 
+                                # now we can to check, if FK was deleted, etc. Instead of this, we can just to try
+                                # create temp index
                                 my $temp_index_name = "temp_".md5_hex($index_part);
                                 if (!$self->{temporary_indexes}{$temp_index_name}) {
                                     debug(3, "Added temporary index $temp_index_name for INDEX's field $index_part ".
                                           "because there is FKs for this field");
                                     $self->{temporary_indexes}{$temp_index_name} = $index_part;
                                     $changes .= $self->_add_index_wa_routines(
-                                            $name1, 
-                                            $temp_index_name, 
-                                            "ALTER TABLE $name1 ADD INDEX $temp_index_name ($index_part);", 
-                                            'create'
+                                                  $name1,
+                                                  $temp_index_name,
+                                                  "ALTER TABLE $name1 ADD INDEX $temp_index_name ($index_part);",
+                                                  'create'
                                     ) . "\n";
                                 }
                             }
-                            if ($field_index_part && ($field_index_part =~ /(CURRENT_TIMESTAMP(?:\(\))?|NOW\(\)|LOCALTIME(?:\(\))?|LOCALTIMESTAMP(?:\(\))?)/)) {
+                            if ($field_index_part &&
+                                ($field_index_part
+                                   =~ /(CURRENT_TIMESTAMP(?:\(\))?|NOW\(\)|LOCALTIME(?:\(\))?|LOCALTIMESTAMP(?:\(\))?)/)) {
                                 $weight = 1;
                                 $is_timestamp = 1;
                             }
@@ -950,22 +965,26 @@ sub _diff_indices {
                                     $rc_index_name = "rc_temp_".md5_hex($index_part)."_change";
                                     $self->{temporary_indexes}{$rc_index_name} = $index_part;
                                     debug(3, "Added temporary index $rc_index_name for INDEX's field $index_part ".
-                                          "because there is FK for this field in SECOND table and index $index has same name as FK");
+                                          "because there is FK for this field in SECOND table and index $index has ".
+                                          "same name as FK");
                                     if ($self->{added_pk_col} eq $index_part) {
                                         $added_pk_index_weight = 1;
                                     } else {
                                         $added_pk_index_weight = $self->{added_for_fk}{$index} ? 5 : 6;
                                     }
                                     if ($self->{opts}{'list-tables'}) {
-                                        push @changes, [$self->_add_header($table2, "change_index"), {'k' => $added_pk_index_weight}];    
+                                        push @changes, [$self->_add_header($table2, "change_index"),
+                                                        {'k' => $added_pk_index_weight}];
                                     }
                                     push @changes, [
-                                        $self->_add_index_wa_routines($name1, $rc_index_name, "ALTER TABLE $name1 ADD INDEX $rc_index_name ($index_part);", 'create') . "\n", 
+                                        $self->_add_index_wa_routines($name1, $rc_index_name,
+                                          "ALTER TABLE $name1 ADD INDEX $rc_index_name ($index_part);", 'create') . "\n",
                                         {'k' => $added_pk_index_weight}
-                                    ]; 
+                                    ];
                                 }
                             }
-                            if ($table2->field($index_part) =~ /(CURRENT_TIMESTAMP(?:\(\))?|NOW\(\)|LOCALTIME(?:\(\))?|LOCALTIMESTAMP(?:\(\))?)/) {
+                            if ($table2->field($index_part)
+                                  =~ /(CURRENT_TIMESTAMP(?:\(\))?|NOW\(\)|LOCALTIME(?:\(\))?|LOCALTIMESTAMP(?:\(\))?)/) {
                                 $weight = 1;
                                 $is_timestamp = 1;
                             }
@@ -975,10 +994,12 @@ sub _diff_indices {
                     if ($need_drop) {
                         debug(3, "drop index $index to change it later FK changing");
                         $index_wa_stmt = '';
-                        $index_wa_stmt = $self->_add_header($table1, "drop_wa_index") unless !$self->{opts}{'list-tables'};
-                        $index_wa_stmt .= $self->_add_index_wa_routines($name1, $index, "ALTER TABLE $name1 DROP INDEX $index;", 'drop');
+                        $index_wa_stmt = $self->_add_header($table1, "drop_wa_index")
+                          unless !$self->{opts}{'list-tables'};
+                        $index_wa_stmt .= $self->_add_index_wa_routines($name1, $index,
+                                            "ALTER TABLE $name1 DROP INDEX $index;", 'drop');
                         push @changes, [$index_wa_stmt . "\n", {'k' => $self->{added_for_fk}{$index} ? 5 : 6}]; 
-                    }                    
+                    }
                     if ($is_timestamp) {
                         $index_parts = $table1->indices_parts($index);
                         if ($index_parts) {
@@ -988,8 +1009,10 @@ sub _diff_indices {
                             for $index_part (keys %$index_parts) {
                                 $iter = 1;
                                 debug(3, "check column $index_part is dropped");
-                                # if in second table current column was dropped, check if all parts of index was dropped
-                                $index_dropped_by_all_parts = $index_dropped_by_all_parts && $self->{dropped_columns}{$index_part};
+                                # if in second table current column was dropped, check if all parts
+                                # of index were dropped
+                                $index_dropped_by_all_parts = $index_dropped_by_all_parts &&
+                                  $self->{dropped_columns}{$index_part};
                             }
                             if (!$iter) {
                                 $index_dropped_by_all_parts = 0;
@@ -997,10 +1020,12 @@ sub _diff_indices {
                         }
                     }
                     if ($index_dropped_by_all_parts) {
-                        debug(3, "All parts of index $index was dropped, so timestamp column not needed in drop index");
+                        debug(3, "All parts of index $index were dropped, ".
+                              "so timestamp column not needed in drop index");
                     }
                     else {
-                        $index_wa_stmt = $self->_add_index_wa_routines($name1, $index, "ALTER TABLE $name1 DROP INDEX $index;", 'drop');
+                        $index_wa_stmt = $self->_add_index_wa_routines($name1, $index,
+                                           "ALTER TABLE $name1 DROP INDEX $index;", 'drop');
                         $changes .= $index_wa_stmt;
                         $changes .= " # was $old_type ($indices1->{$index})$ind1_opts"
                             unless $self->{opts}{'no-old-defs'};
@@ -1022,7 +1047,7 @@ sub _diff_indices {
                         # reset added index description
                         $self->{added_index} = {};
                     }
-                    push @changes, [$changes, {'k' => $added_pk_index_weight ? $added_pk_index_weight : $weight}]; 
+                    push @changes, [$changes, {'k' => $added_pk_index_weight ? $added_pk_index_weight : $weight}];
                 }
             } else {
                 my $auto = _check_for_auto_col($table2, $indices1->{$index}, 0) || '';
@@ -1067,7 +1092,7 @@ sub _diff_indices {
                                       "and index $index has same name as FK");
                                 push @changes, [
                                     $self->_add_index_wa_routines($name1, $index,
-                                      "ALTER TABLE $name1 ADD INDEX $rc_index_name ($index_part);", 'create') . "\n", 
+                                      "ALTER TABLE $name1 ADD INDEX $rc_index_name ($index_part);", 'create') . "\n",
                                     {'k' => $self->{added_for_fk}{$index} ? 5 : 6}
                                 ]; 
                             }
@@ -1079,11 +1104,13 @@ sub _diff_indices {
                                 debug(3, "Added temporary index $temp_index_name for INDEX's field $index_part ".
                                       "because there is FKs for this field");
                                 $self->{temporary_indexes}{$temp_index_name} = $index_part;
-                                $changes .= $self->_add_index_wa_routines($name1, $temp_index_name, 
-                                              "ALTER TABLE $name1 ADD INDEX $temp_index_name ($index_part);", 'create') . "\n";
+                                $changes .= $self->_add_index_wa_routines($name1, $temp_index_name,
+                                              "ALTER TABLE $name1 ADD INDEX $temp_index_name ($index_part);",
+                                              'create') . "\n";
                             }
                         }
-                        if ($self->{changed_to_empty_char_col}{'field'} && ($self->{changed_to_empty_char_col}{'field'} eq $index_part)) {
+                        if ($self->{changed_to_empty_char_col}{'field'} &&
+                            ($self->{changed_to_empty_char_col}{'field'} eq $index_part)) {
                             $weight = $self->{changed_to_empty_char_col}{'weight'} + 1;
                         }
                     }
@@ -1091,18 +1118,18 @@ sub _diff_indices {
                 # do the step 2
                 if ($need_drop) {
                     debug(3, "drop index $index to drop it later FK changing");
-                    $index_wa_stmt = $self->_add_index_wa_routines($name1, $index, 
+                    $index_wa_stmt = $self->_add_index_wa_routines($name1, $index,
                                        "ALTER TABLE $name1 DROP INDEX $index;", 'drop');
-                    push @changes, [$index_wa_stmt . "\n", {'k' => $self->{added_for_fk}{$index} ? 5 : 6}]; 
-                }  
+                    push @changes, [$index_wa_stmt . "\n", {'k' => $self->{added_for_fk}{$index} ? 5 : 6}];
+                }
                 $index_wa_stmt = $self->_add_index_wa_routines($name1, $index,
                                    "ALTER TABLE $name1 DROP INDEX $index;", 'drop');
                 $changes .= $index_wa_stmt;
-                $changes .= " # was $old_type ($indices1->{$index})$ind1_opts" 
+                $changes .= " # was $old_type ($indices1->{$index})$ind1_opts"
                     unless $self->{opts}{'no-old-defs'};
                 $changes .= "\n";
                 if (keys %{$self->{added_index}} && $auto_increment_check) {
-                    # alter column after 
+                    # alter column after
                     if ($self->{added_index}{is_new}) {
                         my $desc = $self->{added_index}{desc};
                         my $f = $self->{added_index}{field};
@@ -1117,9 +1144,9 @@ sub _diff_indices {
         }
     }
 
-    if($indices2) {
+    if ($indices2) {
         for my $index (keys %$indices2) {
-            next    if($indices1 && $indices1->{$index});
+            next if ($indices1 && $indices1->{$index});
             debug(2,"index '$index' added");
             my $need_recreate = 0;
             my $is_fk = 0;
@@ -1159,13 +1186,17 @@ sub _diff_indices {
             for my $ip (keys %$parts) {
                 if ($is_fk) {
                     my $col_fk = $table2->get_fk_by_col($ip);
-                    # if one of parts of index was not in fk, we will need to change index (drop it and then to create again)
-                    # in other way, index will NOT be created, if it is FK and all parts of it equal to FK parts (because in MySQL constraint automatically creates index)
+                    # if one of parts of index was not in fk, we will
+                    # need to change index (drop it and then to create
+                    # again) in other way, index will NOT be created,
+                    # if it is FK and all parts of it equal to FK
+                    # parts (because in MySQL constraint automatically
+                    # creates index)
                     if (!$col_fk || !($col_fk->{$index})) {
                         my $temp_index_name = "rc_temp_".md5_hex($ip)."_add";
                         debug(3, "need recreate index $index, add temporary index $temp_index_name for $ip");
                         $self->{temporary_indexes}{$temp_index_name} = $ip;
-                        $changes .= $self->_add_index_wa_routines($name1, $temp_index_name, 
+                        $changes .= $self->_add_index_wa_routines($name1, $temp_index_name,
                                       "ALTER TABLE $name1 ADD INDEX $temp_index_name ($ip);", 'create') . "\n";
                         $need_recreate = 1;
                     }
@@ -1179,7 +1210,7 @@ sub _diff_indices {
                     last;
                 }
             }
-            
+
             my $tmp_changes = $changes;
             $changes = '';
             $changes = $self->_add_header($table2, "add_index") unless !$self->{opts}{'list-tables'};
@@ -1209,7 +1240,8 @@ sub _diff_indices {
                 push @changes, [$changes, {'k' => $weight}];
             }
             if ($is_fk && !$need_recreate) {
-                # if there is already key for FK, or it is not dropped yet (will be dropped after), we need to try create index 
+                # if there is already key for FK, or it is not dropped yet (will be dropped after),
+                # we need to try create index
                 $index_wa_stmt = $self->_add_index_wa_routines($name1, $index,
                                    "ALTER TABLE $name1 ADD $new_type $index ($indices2->{$index})$opts;", 'create');
                 $changes .= $index_wa_stmt . "\n";
@@ -1241,9 +1273,9 @@ sub _diff_primary_key {
         my $changes = '';
         $changes .= $self->_add_header($table2, "add_pk") unless !$self->{opts}{'list-tables'};
         $changes .= "ALTER TABLE $name1 ADD PRIMARY KEY $primary2;\n";
-        return ["$changes\n", {'k' => 3}]; 
+        return ["$changes\n", {'k' => 3}];
     }
-  
+
     my $changes = '';
     my $action_type = '';
     my $k = 3;
@@ -1259,7 +1291,7 @@ sub _diff_primary_key {
             }
         }
         my $pks = $table1->primary_parts();
-        my $pk_ops = 1; 
+        my $pk_ops = 1;
         my $fks;
         # for every part in primary key (if non-composite, there will be only one part)
         for my $pk (keys %$pks) {
@@ -1276,7 +1308,7 @@ sub _diff_primary_key {
                     debug(3, "Added temporary index $temp_index_name for PK's field $pk ".
                           "because there is FKs for this field");
                     $self->{temporary_indexes}{$temp_index_name} = $pk;
-                    $changes .= $self->_add_index_wa_routines($name1, $temp_index_name, 
+                    $changes .= $self->_add_index_wa_routines($name1, $temp_index_name,
                                   "ALTER TABLE $name1 ADD INDEX $temp_index_name ($pk);", 'create') . "\n";
                 }
             }
@@ -1310,13 +1342,13 @@ sub _diff_primary_key {
                 if ($pk_ops) {
                     $k = 0; # In this case we must to do all work in the final
                 }
-            }   
-        }               
+            }
+        }
     }
-    
+
     if ($changes) {
         $changes = $self->_add_header($table1, $action_type) . $changes unless !$self->{opts}{'list-tables'};
-        push @changes, [$changes, {'k' => $k}]; 
+        push @changes, [$changes, {'k' => $k}];
     }
     return @changes;
 }
@@ -1332,14 +1364,13 @@ sub _diff_foreign_key {
     return () unless $fks1 || $fks2;
 
     my @changes;
-  
+
     if($fks1) {
         for my $fk (keys %$fks1) {
             debug(2,"$name1 has fk '$fk'");
 
             if ($fks2 && $fks2->{$fk}) {
-                if($fks1->{$fk} ne $fks2->{$fk})  
-                {
+                if($fks1->{$fk} ne $fks2->{$fk}) {
                     debug(3,"foreign key '$fk' changed");
                     my $changes = '';
                     $changes = $self->_add_header($table1, 'change_fk', 1) unless !$self->{opts}{'list-tables'};
@@ -1360,15 +1391,14 @@ sub _diff_foreign_key {
                             }
                         }
                     }
-                    $changes .= "\nALTER TABLE $name1 ADD CONSTRAINT $fk FOREIGN KEY $fks2->{$fk};\n";    
+                    $changes .= "\nALTER TABLE $name1 ADD CONSTRAINT $fk FOREIGN KEY $fks2->{$fk};\n";
                     # CHANGE FK before column for it may be changed
                     my $weight = 6;
                     if ($self->{added_for_fk}{$fk}) {
                         # if fk was changed and it reference by new column, change it after column adding
                         $weight = $self->{added_for_fk}{$fk};
                     }
-                            
-                    push @changes, [$changes, {'k' => $weight}]; 
+                    push @changes, [$changes, {'k' => $weight}];
                 }
             } else {
                 debug(3,"foreign key '$fk' removed");
@@ -1383,7 +1413,7 @@ sub _diff_foreign_key {
         }
     }
 
-    if($fks2) {
+    if ($fks2) {
         for my $fk (keys %$fks2) {
             next    if($fks1 && $fks1->{$fk});
             debug(3, "foreign key '$fk' added");
@@ -1402,18 +1432,19 @@ sub _diff_foreign_key {
 # auto_increment; if so, we have to add an index for that
 # auto_increment column *before* dropping the composite index, since
 # auto_increment columns must always be indexed.
-sub _check_for_auto_col {       
+sub _check_for_auto_col {
     my ($table, $fields, $primary) = @_;
 
     $fields =~ s/^\s*\((.*)\)\s*$/$1/g; # strip brackets if any
     my @fields = split /\s*,\s*/, $fields;
-    
+
     for my $field (@fields) {
         my $not_is_field = (!$table->field($field));
         debug(3, "field '$field' not exists in table in second database") if $not_is_field;
         next if $not_is_field;
         my $not_AI = ($table->field($field) !~ /auto_increment/i);
-        debug(3, "field '$field' is not AUTO_INCREMENT in table in second database (" . $table->field($field)  . ")") if $not_AI;
+        debug(3, "field '$field' is not AUTO_INCREMENT in table in second database (" .
+              $table->field($field)  . ")") if $not_AI;
         next if $not_AI;
         #next if($table->isa_index($field));
         my $pk = ($primary && $table->isa_primary($field));
@@ -1454,7 +1485,8 @@ sub _diff_options {
             } else {
                 debug(3, "Dropped temporary index $temporary_index");
                 $change .= $self->_add_header($table1, 'drop_temporary_index') unless !$self->{opts}{'list-tables'};
-                $change .= $self->_add_index_wa_routines($name, $temporary_index, "ALTER TABLE $name DROP INDEX $temporary_index;", 'drop') . "\n";
+                $change .= $self->_add_index_wa_routines($name, $temporary_index,
+                             "ALTER TABLE $name DROP INDEX $temporary_index;", 'drop') . "\n";
             }
         }
     }
@@ -1497,14 +1529,15 @@ sub _diff_options {
                     $opt_change .= "ALTER TABLE $name REMOVE PARTITIONING;\n";
                     push @changes, [$opt_change, {'k' => 8}]; 
                     $k = 0;
-                    # alternatively we must parse partition definition and get all fields (which may be in functions, for example)
+                    # alternatively we must parse partition definition and get all fields
+                    # (which may be in functions, for example)
                 } else {
                     debug(4, "PARTITION of table '$name' in all databases are equal\nFirst: $part1\nSecond: $part2");
                 }
             } else {
                 debug(3, "No partitions in table in first database, so we just add them");
             }
-            # last, we must to change options (if there was partitions, options will be have substring 
+            # last, we must to change options (if there was partitions, options will be have substring
             # of options without partitions definition)
             $change .= $self->_add_header($table1, $opt_header) unless !$self->{opts}{'list-tables'};
             $change .= "ALTER TABLE $name $options2;";
@@ -1516,7 +1549,7 @@ sub _diff_options {
                 debug(3, "drop partitions from table '$name'");
                 $opt_change = $self->_add_header($table1, 'drop_partitioning') unless !$self->{opts}{'list-tables'};
                 $opt_change .= "ALTER TABLE $name REMOVE PARTITIONING;\n";
-                push @changes, [$opt_change, {'k' => 8}]; 
+                push @changes, [$opt_change, {'k' => 8}];
             }
         }
         # change table options without partitions first
@@ -1591,7 +1624,7 @@ sub _add_header {
         my $additional_fk_tables = $table->fk_tables();
         if ($additional_fk_tables) {
             $comment .= ",\n-- \t\"referenced_tables\" : [\n";
-            $comment .= "-- \t\t\"" . join "\",\n-- \t\t\"", keys %$additional_fk_tables; 
+            $comment .= "-- \t\t\"" . join "\",\n-- \t\t\"", keys %$additional_fk_tables;
             $comment .= "\"\n-- \t]";
         }
     }
