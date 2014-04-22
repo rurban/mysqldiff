@@ -32,7 +32,7 @@ Parses a table definition into component parts.
 use warnings;
 use strict;
 
-our $VERSION = '0.47';
+our $VERSION = '0.51';
 
 # ------------------------------------------------------------------------------
 # Libraries
@@ -131,6 +131,10 @@ Returns 1 if given field is defined as a primary key, otherwise returns 0.
 
 Returns 1 if given field is used as an index field, otherwise returns 0.
 
+=item * isa_fk
+
+Returns 1 if given field is a foreign key, otherwise returns 0.
+
 =item * is_unique
 
 Returns 1 if given field is used as unique index field, otherwise returns 0.
@@ -138,6 +142,27 @@ Returns 1 if given field is used as unique index field, otherwise returns 0.
 =item * is_fulltext
 
 Returns 1 if given field is used as fulltext index field, otherwise returns 0.
+
+=item * fields_links
+
+Return the linked field for the given field
+
+=item * fields_order
+
+Returns an auto-incremented number for the given field to be able to sort fields,
+as hashes do not keep the order.
+
+=item * foreign_key
+
+Return the target index for the given foreign key
+
+=item * fk_tables
+
+Returns hash table of names for all referenced foreign tables.
+
+=item * get_fk_by_col
+
+Returns hash table of all foreign key names for the given field.
 
 =back
 

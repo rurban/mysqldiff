@@ -213,7 +213,7 @@ CREATE_STMT
                 else {
                     debug(1,"table '$name' dropped");
                     my $change = '';
-                    $change = $self->add_header($table1, "drop_table") unless !$self->{opts}{'list-tables'};
+                    $change = $self->_add_header($table1, "drop_table") unless !$self->{opts}{'list-tables'};
                     $change .= "DROP TABLE $name;\n\n";
                     push @changes, [$change, {'k' => 8}]                 
                         unless $self->{opts}{'only-both'} || $self->{opts}{'keep-old-tables'}; # drop table after all
@@ -228,7 +228,7 @@ CREATE_STMT
                     push @changes, $self->_add_ref_tables($additional_fk_tables);
                 }
                 my $change = '';
-                $change = $self->add_header($table1, "ref_table", 1);
+                $change = $self->_add_header($table1, "ref_table", 1);
                 push @changes, [$change, {'k' => 1}];
             }
         }
@@ -250,7 +250,7 @@ CREATE_STMT
                 if ( ($r_opts1 ne $r_opts2) || ($r_body1 ne $r_body2) || ($r_pars1 ne $r_pars2) ) {
                     write_log($r_type.'_'.$name.'.sql', "Options 1: $r_opts1\nOptions 2: $r_opts2\n".
                               "Body 1: $r_body1\nBody 2: $r_body2\nParams 1: $r_pars1\nParams 2: $r_pars2");
-                    my $change = $self->add_header($routine1, "change_routine") unless !$self->{opts}{'list-tables'};
+                    my $change = $self->_add_header($routine1, "change_routine") unless !$self->{opts}{'list-tables'};
                     $change .= "DROP $r_type IF EXISTS $name;\n";
                     $change .= "DELIMITER ;;\n";
                     $change .= $routine2->def() . ";;\n";
@@ -261,7 +261,7 @@ CREATE_STMT
             } else {
                 debug(1, "$r_type '$name' dropped;");
                 my $change = '';
-                $change = $self->add_header($routine1, "drop_routine") unless !$self->{opts}{'list-tables'};
+                $change = $self->_add_header($routine1, "drop_routine") unless !$self->{opts}{'list-tables'};
                 $change .= "DROP $r_type IF EXISTS $name;\n";
                 push @changes, [$change, {'k' => 5}]                 
                          unless $self->{opts}{'only-both'} || $self->{opts}{'keep-old-tables'}; 
@@ -289,7 +289,7 @@ CREATE_STMT
                          ($opts1->{'algorithm'} ne $opts2->{'algorithm'}) 
                        ) {
                         my $change = '';
-                        $change = $self->add_header($view1, "change_view") unless !$self->{opts}{'list-tables'};
+                        $change = $self->_add_header($view1, "change_view") unless !$self->{opts}{'list-tables'};
                         $change .= "ALTER ALGORITHM=$opts2->{'algorithm'} DEFINER=CURRENT_USER SQL SECURITY ".
                           "$opts2->{'security'} VIEW $name $f2 AS ($sel2) $opts2->{'trail'};\n";
                         push @changes, [$change, {'k' => 5}]                 
@@ -298,7 +298,7 @@ CREATE_STMT
                 } else {
                     debug(1, "view '$name' dropped");
                     my $change = '';
-                    $change = $self->add_header($view1, "drop_view") unless !$self->{opts}{'list-tables'};
+                    $change = $self->_add_header($view1, "drop_view") unless !$self->{opts}{'list-tables'};
                     $change .= "DROP VIEW $name;\n\n";
                     push @changes, [$change, {'k' => 6}]                 
                          unless $self->{opts}{'only-both'} || $self->{opts}{'keep-old-tables'}; 
@@ -327,7 +327,7 @@ CREATE_STMT
                     push @changes, $self->_add_ref_tables($additional_fk_tables, $name);
                 }
                 my $change = '';
-                $change = $self->add_header($table2, "add_table", 1) unless !$self->{opts}{'list-tables'};
+                $change = $self->_add_header($table2, "add_table", 1) unless !$self->{opts}{'list-tables'};
                 $change .= $table2->def() . "\n";
                 push @changes, [$change, {'k' => 6}]
                     unless $self->{opts}{'only-both'};
@@ -336,7 +336,7 @@ CREATE_STMT
                     for my $fk (keys %$fks) {
                         debug(3, "FK $fk for created table $name added");
                         $change = '';
-                        $change = $self->add_header($table2, 'add_fk') unless !$self->{opts}{'list-tables'};
+                        $change = $self->_add_header($table2, 'add_fk') unless !$self->{opts}{'list-tables'};
                         $change .= "ALTER TABLE $name ADD CONSTRAINT $fk FOREIGN KEY $fks->{$fk};\n";
                         push @changes, [$change, {'k' => 1}];
                     }
@@ -349,7 +349,7 @@ CREATE_STMT
             debug(1, "looking at $r_type '$name' in second database");
             if (!$self->db1->routine_by_name($name, $r_type)) {
                 my $change = '';
-                $change = $self->add_header($routine2, "add_routine") unless !$self->{opts}{'list-tables'};
+                $change = $self->_add_header($routine2, "add_routine") unless !$self->{opts}{'list-tables'};
                 $change .= "DELIMITER ;;\n";
                 $change .= $routine2->def(). ";;\n";
                 $change .= "DELIMITER ;\n";
@@ -364,11 +364,11 @@ CREATE_STMT
                 my $change = '';
                 my $temp_view = '';
                 debug(2, "looking for temporary table for view '$name'");
-                $temp_view = $self->add_header($name.'_temptable', "add_table", 0, 1) unless !$self->{opts}{'list-tables'};
+                $temp_view = $self->_add_header($name.'_temptable', "add_table", 0, 1) unless !$self->{opts}{'list-tables'};
                 $temp_view .= "DROP TABLE IF EXISTS $name;\n" . $self->db2->view_temp($name) . "\n";
                 push @changes, [$temp_view, {'k' => 9}] 
                     unless $self->{opts}{'only-both'};    
-                $change = $self->add_header($view2, "add_view") unless !$self->{opts}{'list-tables'};
+                $change = $self->_add_header($view2, "add_view") unless !$self->{opts}{'list-tables'};
                 $change .= "DROP TABLE IF EXISTS $name;\n" . $view2->def() . "\n";
                 push @changes, [$change, {'k' => 5}]
                     unless $self->{opts}{'only-both'};
@@ -388,12 +388,12 @@ CREATE_STMT
         my $line = join '', map $_->[$column_index], @sorted;
         my $wa_name = $self->{index_wa}{'name'};
         if ($self->{index_wa}{'used'}) {
-            $out .= $self->add_header($wa_name . '_create', 'create_workaround', 0, 1);
+            $out .= $self->_add_header($wa_name . '_create', 'create_workaround', 0, 1);
             $out .= $self->{index_wa}{'create-stmt'};
         }
         $out .= $line;
         if ($self->{index_wa}{'used'}) {
-            $out .= $self->add_header($wa_name . '_drop', 'drop_workaround', 0, 1);
+            $out .= $self->_add_header($wa_name . '_drop', 'drop_workaround', 0, 1);
             $out .= $self->{index_wa}{'drop-stmt'};
         }
     }
@@ -425,10 +425,10 @@ sub _add_ref_tables {
                     }
                     my $change = '';
                     if (!$self->{opts}{'refs'}) {
-                        $change = $self->add_header($table, "add_table", 1) unless !$self->{opts}{'list-tables'};
+                        $change = $self->_add_header($table, "add_table", 1) unless !$self->{opts}{'list-tables'};
                         $change .= $table->def()."\n";
                     } else {
-                        $change = $self->add_header($table, "ref_table", 1) . "\n";
+                        $change = $self->_add_header($table, "ref_table", 1) . "\n";
                     }
                     push @changes, [$change, {'k' => 6}];
                     if (!$self->{opts}{'refs'}) {
@@ -437,7 +437,7 @@ sub _add_ref_tables {
                                     for my $fk (keys %$fks) {
                                         debug(3, "FK $fk for created table $name added");
                                         $change = '';
-                                        $change = $self->add_header($table, 'add_fk') unless !$self->{opts}{'list-tables'};
+                                        $change = $self->_add_header($table, 'add_fk') unless !$self->{opts}{'list-tables'};
                                         $change .= "ALTER TABLE $name ADD CONSTRAINT $fk FOREIGN KEY $fks->{$fk};\n";
                                         push @changes, [$change, {'k' => 1}];
                                     }
@@ -629,7 +629,7 @@ sub _diff_fields {
                             $self->{changed_to_empty_char_col}{'weight'} = $weight;
                         } 
                         if (!$self->{changed_pk_auto_col}) {
-                            $change =  $self->add_header($table2, "change_column") unless !$self->{opts}{'list-tables'};
+                            $change =  $self->_add_header($table2, "change_column") unless !$self->{opts}{'list-tables'};
                             $change .= "ALTER TABLE $name1 CHANGE COLUMN $field $field $f2$pk;";
                             $change .= " # was $f1" unless $self->{opts}{'no-old-defs'};
                             $change .= "\n";
@@ -652,7 +652,7 @@ sub _diff_fields {
             } else {
                 debug(3,"field '$field' removed");
                 my $change = '';
-                $change = $self->add_header($table1, "drop_column") unless !$self->{opts}{'list-tables'};
+                $change = $self->_add_header($table1, "drop_column") unless !$self->{opts}{'list-tables'};
                 $change .= "ALTER TABLE $name1 DROP COLUMN $field;";
                 $change .= " # was $fields1->{$field}" unless $self->{opts}{'no-old-defs'};
                 $change .= "\n";
@@ -765,7 +765,7 @@ sub _diff_fields {
                     $field_description =~ s/AUTO_INCREMENT//is;
                 }
                 my $change = '';
-                $change =  $self->add_header($table2, $header_text) unless !$self->{opts}{'list-tables'};
+                $change =  $self->_add_header($table2, $header_text) unless !$self->{opts}{'list-tables'};
                 $change .= "ALTER TABLE $name1 ADD COLUMN $field $field_description$pk;\n";
                 $self->{added_cols}{$field} = 1;
                 if ($prev_field && $prev_field_links && $self->{timestamps}{$prev_field} && !$self->{timestamps}{$field}) {
@@ -897,7 +897,7 @@ sub _diff_indices {
                     }
                     $auto_increment_check = $auto  ? 1 : 0;
                     my $changes = '';
-                    $changes = $self->add_header($table2, "change_index") unless !$self->{opts}{'list-tables'};
+                    $changes = $self->_add_header($table2, "change_index") unless !$self->{opts}{'list-tables'};
                     $changes .= $auto ? $self->_index_auto_col($table1, $indices1->{$index}, 
                                                                $self->{opts}{'no-old-defs'}) : '';
                     if ($auto) {
@@ -957,7 +957,7 @@ sub _diff_indices {
                                         $added_pk_index_weight = $self->{added_for_fk}{$index} ? 5 : 6;
                                     }
                                     if ($self->{opts}{'list-tables'}) {
-                                        push @changes, [$self->add_header($table2, "change_index"), {'k' => $added_pk_index_weight}];    
+                                        push @changes, [$self->_add_header($table2, "change_index"), {'k' => $added_pk_index_weight}];    
                                     }
                                     push @changes, [
                                         $self->_add_index_wa_routines($name1, $rc_index_name, "ALTER TABLE $name1 ADD INDEX $rc_index_name ($index_part);", 'create') . "\n", 
@@ -975,7 +975,7 @@ sub _diff_indices {
                     if ($need_drop) {
                         debug(3, "drop index $index to change it later FK changing");
                         $index_wa_stmt = '';
-                        $index_wa_stmt = $self->add_header($table1, "drop_wa_index") unless !$self->{opts}{'list-tables'};
+                        $index_wa_stmt = $self->_add_header($table1, "drop_wa_index") unless !$self->{opts}{'list-tables'};
                         $index_wa_stmt .= $self->_add_index_wa_routines($name1, $index, "ALTER TABLE $name1 DROP INDEX $index;", 'drop');
                         push @changes, [$index_wa_stmt . "\n", {'k' => $self->{added_for_fk}{$index} ? 5 : 6}]; 
                     }                    
@@ -1033,7 +1033,7 @@ sub _diff_indices {
                 }
                 $auto_increment_check = $auto ? 1 : 0;
                 my $changes = '';
-                $changes = $self->add_header($table1, "drop_index") unless !$self->{opts}{'list-tables'};
+                $changes = $self->_add_header($table1, "drop_index") unless !$self->{opts}{'list-tables'};
                 $changes .= $auto ? $self->_index_auto_col($table1, $indices1->{$index}, $self->{opts}{'no-old-defs'}) : '';
                 if ($auto) {
                     my $auto_index_name = "mysqldiff_".md5_hex($name1."_".$auto);
@@ -1182,7 +1182,7 @@ sub _diff_indices {
             
             my $tmp_changes = $changes;
             $changes = '';
-            $changes = $self->add_header($table2, "add_index") unless !$self->{opts}{'list-tables'};
+            $changes = $self->_add_header($table2, "add_index") unless !$self->{opts}{'list-tables'};
             $changes .= $tmp_changes;
             if ($need_recreate) {
                 debug(3, "drop index $index to recreate it");
@@ -1239,7 +1239,7 @@ sub _diff_primary_key {
         }
         debug(2,"primary key '$primary2' added");
         my $changes = '';
-        $changes .= $self->add_header($table2, "add_pk") unless !$self->{opts}{'list-tables'};
+        $changes .= $self->_add_header($table2, "add_pk") unless !$self->{opts}{'list-tables'};
         $changes .= "ALTER TABLE $name1 ADD PRIMARY KEY $primary2;\n";
         return ["$changes\n", {'k' => 3}]; 
     }
@@ -1315,7 +1315,7 @@ sub _diff_primary_key {
     }
     
     if ($changes) {
-        $changes = $self->add_header($table1, $action_type) . $changes unless !$self->{opts}{'list-tables'};
+        $changes = $self->_add_header($table1, $action_type) . $changes unless !$self->{opts}{'list-tables'};
         push @changes, [$changes, {'k' => $k}]; 
     }
     return @changes;
@@ -1342,7 +1342,7 @@ sub _diff_foreign_key {
                 {
                     debug(3,"foreign key '$fk' changed");
                     my $changes = '';
-                    $changes = $self->add_header($table1, 'change_fk', 1) unless !$self->{opts}{'list-tables'};
+                    $changes = $self->_add_header($table1, 'change_fk', 1) unless !$self->{opts}{'list-tables'};
                     my $dropped_columns = $self->{dropped_columns};
                     my $dropped_column_fks;
                     $changes .= "ALTER TABLE $name1 DROP FOREIGN KEY $fk;";
@@ -1373,7 +1373,7 @@ sub _diff_foreign_key {
             } else {
                 debug(3,"foreign key '$fk' removed");
                 my $changes = '';
-                $changes = $self->add_header($table1, 'drop_fk') unless !$self->{opts}{'list-tables'};
+                $changes = $self->_add_header($table1, 'drop_fk') unless !$self->{opts}{'list-tables'};
                 $changes .= "ALTER TABLE $name1 DROP FOREIGN KEY $fk;";
                 $changes .= " # was CONSTRAINT $fk FOREIGN KEY $fks1->{$fk}"
                         unless $self->{opts}{'no-old-defs'};
@@ -1388,7 +1388,7 @@ sub _diff_foreign_key {
             next    if($fks1 && $fks1->{$fk});
             debug(3, "foreign key '$fk' added");
             my $change = '';
-            $change = $self->add_header($table2, 'add_fk', 1) unless !$self->{opts}{'list-tables'};
+            $change = $self->_add_header($table2, 'add_fk', 1) unless !$self->{opts}{'list-tables'};
             $change .= "ALTER TABLE $name1 ADD CONSTRAINT $fk FOREIGN KEY $fks2->{$fk};\n";
             push @changes, [$change, {'k' => 1}]; # add FK after all
         }
@@ -1453,7 +1453,7 @@ sub _diff_options {
                 debug(3, "Column $column was already dropped, so we must not drop temporary index");
             } else {
                 debug(3, "Dropped temporary index $temporary_index");
-                $change .= $self->add_header($table1, 'drop_temporary_index') unless !$self->{opts}{'list-tables'};
+                $change .= $self->_add_header($table1, 'drop_temporary_index') unless !$self->{opts}{'list-tables'};
                 $change .= $self->_add_index_wa_routines($name, $temporary_index, "ALTER TABLE $name DROP INDEX $temporary_index;", 'drop') . "\n";
             }
         }
@@ -1493,7 +1493,7 @@ sub _diff_options {
                 my $part1 = $1;
                 if ($part2 ne $part1) {
                     debug(4, "PARTITION of table '$name' in first database is $part1, but in second is $part2");
-                    $opt_change = $self->add_header($table1, 'drop_partitioning') unless !$self->{opts}{'list-tables'};
+                    $opt_change = $self->_add_header($table1, 'drop_partitioning') unless !$self->{opts}{'list-tables'};
                     $opt_change .= "ALTER TABLE $name REMOVE PARTITIONING;\n";
                     push @changes, [$opt_change, {'k' => 8}]; 
                     $k = 0;
@@ -1506,7 +1506,7 @@ sub _diff_options {
             }
             # last, we must to change options (if there was partitions, options will be have substring 
             # of options without partitions definition)
-            $change .= $self->add_header($table1, $opt_header) unless !$self->{opts}{'list-tables'};
+            $change .= $self->_add_header($table1, $opt_header) unless !$self->{opts}{'list-tables'};
             $change .= "ALTER TABLE $name $options2;";
             $change .= " # was " . ($options1 || 'blank') unless $self->{opts}{'no-old-defs'};
             $change .= "\n";
@@ -1514,13 +1514,13 @@ sub _diff_options {
             if ($options1 =~ /PARTITION BY/) {
                 # drop partitions
                 debug(3, "drop partitions from table '$name'");
-                $opt_change = $self->add_header($table1, 'drop_partitioning') unless !$self->{opts}{'list-tables'};
+                $opt_change = $self->_add_header($table1, 'drop_partitioning') unless !$self->{opts}{'list-tables'};
                 $opt_change .= "ALTER TABLE $name REMOVE PARTITIONING;\n";
                 push @changes, [$opt_change, {'k' => 8}]; 
             }
         }
         # change table options without partitions first
-        $opt_change = $self->add_header($table1, 'change_options') unless !$self->{opts}{'list-tables'};
+        $opt_change = $self->_add_header($table1, 'change_options') unless !$self->{opts}{'list-tables'};
         $opt_change .= "ALTER TABLE $name $before_part;\n";
         push @changes, [$opt_change, {'k' => 8}]; 
     }
@@ -1576,7 +1576,7 @@ sub _debug_level {
     debug_level($level);
 }
 
-sub add_header {
+sub _add_header {
     my ($self, $table, $type, $add_referenced, $asis) = @_;
     my $name;
     if ($asis) {

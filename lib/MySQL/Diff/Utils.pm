@@ -28,7 +28,8 @@ use IO::File;
 # Export Components
 
 use base qw(Exporter);
-our @EXPORT_OK = qw(debug_file debug_level debug set_save_quotes get_save_quotes save_logdir get_logdir write_log generate_random_string);
+our @EXPORT_OK = qw(debug_file debug_level debug set_save_quotes get_save_quotes save_logdir
+                    get_logdir write_log generate_random_string);
 
 # ------------------------------------------------------------------------------
 
@@ -68,6 +69,19 @@ Save choice about save saving quotes
 =item * get_save_quotes
 
 Get choice about save saving quotes
+
+=item * get_logdir
+
+Return current log dir
+
+=item * save_logdir( $log_dir )
+
+Save current log dir
+
+=item * write_log( $filename, $content, $append )
+
+Create or append content to filename in the directory
+$log_dir. '/dump_' . time() . '_' . generate_random_string()
 
 =back
 

@@ -3,12 +3,15 @@
 0.51    23th April 2014
         - Merge many bugfixes and extensions by guyfawkes (Vitaly Evsyukov):
           - multiple fixes with primary keys
-          - Added parameter --refs (-r). Now you can to view all refs in database
-          - uses views
-          - fix for TIMESTAMP columns statements order, also for AFTER clause
           - parses correctly stored procedures, functions and triggers
-          - Multiple bug fixes with columns order, fields diff, primary key, when not exists
-          in one of two tables
+          - added parameter --refs (-r). Now you can view all refs in database
+          - add support for foreign keys and views
+          - fix for TIMESTAMP columns statements order, also for AFTER clause
+          - multiple bug fixes with columns order, fields diff, primary key, when not exists
+            in one of two tables
+          - added MySQL::Diff::Table public methods: fields_links, fields_order, fk_tables, foreign_key,
+            get_fk_by_col, isa_fk
+          - added MySQL::Diff::Utils public methods: get_logdir, save_logdir, write_log
 
 0.44    22th April 2014
         - optimized the --table-re option to exclude
