@@ -259,9 +259,9 @@ Note that is used as a function call, not a method call.
 =cut
 
 sub available_dbs {
-    debug(1, "Started to get available databases list");
     my %auth = @_;
     my $args = _auth_args_string(%auth);
+    debug(1, "Started to get available databases list");
   
     # evil but we don't use DBI because I don't want to implement -p properly
     # not that this works with -p anyway ...
@@ -309,6 +309,7 @@ sub _canonicalise_file {
     $fh = IO::File->new("| mysql $args") or die "Couldn't execute 'mysql$args': $!\n";
     print $fh "DROP DATABASE \`$temp_db\`;\n";
     $fh->close;
+    return;
 }
 
 sub _read_db {
@@ -317,16 +318,15 @@ sub _read_db {
     # store database name, if it's not temporary database
     $self->{db_name} = $db;
     debug(1, "fetching table defs from db $db");
-    $self->_get_defs($db);
+    return $self->_get_defs($db);
 }
 
+# pre-compile table-re and apply it to the table names
 sub _get_tables_to_dump {
     my ( $self, $db ) = @_;
 
     my $tables_ref = $self->_get_tables_in_db($db);
-
     my $compiled_table_re = qr/$self->{'table-re'}/;
-
     my @matching_tables = grep { $_ =~ $compiled_table_re } @{$tables_ref};
 
     return join( ' ', @matching_tables );
@@ -418,8 +418,9 @@ sub _get_defs {
     debug(6, "running mysqldump -d $args $db");
     my $defs = $self->{_defs} = [ <$fh> ];
     $fh->close;
-    open(DUMP_ERRS, "<", $errors_fname);
-    my(@errs_lines) = <DUMP_ERRS>;
+    my $dump_errs;
+    open ($dump_errs, "<", $errors_fname) or die "Couldn't read from mysqldump stderr outfile: $!\n";
+    my(@errs_lines) = <$dump_errs>;
     debug(6, "dump time: ".(time() - $start_time));
     if (grep /mysqldump: Got error: .*: Unknown database/, @errs_lines) {
         die <<EOF;
@@ -428,6 +429,7 @@ during canonicalization.  Make sure that your mysql.db table has a row
 authorizing full access to all databases matching 'test\\_%', and that
 the database doesn't already exist.
 EOF
+    # ' to help emacs cperl
     }
     if (@errs_lines && !grep /Using a password on the command line interface can be insecure/, @errs_lines) {
         print "Errors from mysqldump:\n";
@@ -435,7 +437,8 @@ EOF
         print "mysqldiff cannot get diff because of this errors\n";
         exit(1); 
     }
-    close (DUMP_ERRS);
+    close $dump_errs;
+    return;
 }
 
 sub _parse_defs {
@@ -587,6 +590,7 @@ sub _parse_defs {
     for my $v (keys %{$self->{v_by_name}}) {
         push @{$self->{_views}}, $self->{v_by_name}{$v};
     }
+    return;
 }
 
 sub _auth_args_string {

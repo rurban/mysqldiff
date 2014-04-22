@@ -107,7 +107,7 @@ $log_dir. '/dump_' . time() . '_' . generate_random_string()
     }
 
     sub debug {
-        my $level = shift;
+        my ($level) = @_;
         return  unless($debug_level >= $level && @_);
 
         if($debug_file) {
@@ -122,10 +122,12 @@ $log_dir. '/dump_' . time() . '_' . generate_random_string()
             $padding .= '    ';
         }
         print STDERR $padding,@_,"\n";
+        return;
     }
     
     sub set_save_quotes {
         $choice = @_;
+        return;
     }
     
     sub get_save_quotes {
@@ -134,6 +136,7 @@ $log_dir. '/dump_' . time() . '_' . generate_random_string()
 
     sub save_logdir {
         $log_dir = shift;
+        return;
     }
 
     sub get_logdir {
