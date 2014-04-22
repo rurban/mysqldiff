@@ -1,5 +1,15 @@
 # Changes log for Test::CPAN::Meta
 
+0.51    23th April 2014
+        - Merge many bugfixes and extensions by guyfawkes (Vitaly Evsyukov):
+          - multiple fixes with primary keys
+          - Added parameter --refs (-r). Now you can to view all refs in database
+          - uses views
+          - fix for TIMESTAMP columns statements order, also for AFTER clause
+          - parses correctly stored procedures, functions and triggers
+          - Multiple bug fixes with columns order, fields diff, primary key, when not exists
+          in one of two tables
+
 0.44    22th April 2014
         - optimized the --table-re option to exclude
           tables before comparing them as this would
