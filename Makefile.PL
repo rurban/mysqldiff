@@ -34,6 +34,7 @@ WriteMakefile1(
     },
     EXE_FILES    => [ 'bin/mysqldiff' ],
     VERSION_FROM => 'lib/MySQL/Diff.pm', # finds $VERSION
+    clean => { FILES => "t/logs/ debug.log _build/ Build " },
 );
 
 sub WriteMakefile1 {  #Written by Alexandr Ciornii, version 0.21. Added by eumm-upgrade.
