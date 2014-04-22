@@ -159,7 +159,7 @@ Options:
   -A,  --apply            interactively patch database1 to match database2
   -B,  --batch-apply      non-interactively patch database1 to match database2
   -d,  --debug[=N]        enable debugging [level N, default 1]
-  -l,  --list-tables      output the list off all used tables
+  -l,  --list-tables      output the list of all used tables
   -S,  --save-quotes      save quotes in tables definitions
   -o,  --only-both        only output changes for tables in both databases
   -k,  --keep-old-tables  don't output DROP TABLE commands
@@ -183,8 +183,8 @@ for <databaseN> only, where N == 1 or 2,
        --socketN=...      socket to use when connecting to server
 
 Databases can be either files or database names.
-If there is an ambiguity, the file will be preferred;
-to prevent this prefix the database argument with `db:'.
+If there is an ambiguity, the file will be preferred.
+To prevent this, prefix the database argument with `db:'.
 EOF
 }
 

@@ -309,9 +309,10 @@ sub _parse {
         if (/^\)\s*(.*?)$/) { # end of table definition
             $end_found = 1;
             my $opt = $1;
-            # strip AUTO_INCREMENT and other trash options from table definition and from options variable content
+            # strip AUTO_INCREMENT and other trash options from table definition
+            # and from options variable content
             my $opt_stripped = $opt;
-            my @strip_trash = ('AUTO_INCREMENT', 'AVG_ROW_LENGTH', 'CHECKSUM', 'ROW_FORMAT', 'DELAY_KEY_WRITE');
+            my @strip_trash = qw(AUTO_INCREMENT AVG_ROW_LENGTH CHECKSUM ROW_FORMAT DELAY_KEY_WRITE);
             if ($opt =~ /MyISAM/i) {
                 @strip_trash = ('AUTO_INCREMENT');
             }
@@ -384,7 +385,7 @@ sub _parse {
 
     warn "table '$self->{name}' had trailing garbage:\n", join '', @lines
         if @lines;
-        
+    return;
 }
 
 1;
