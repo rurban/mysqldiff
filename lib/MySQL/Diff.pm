@@ -1391,9 +1391,9 @@ sub _diff_foreign_key {
                             }
                         }
                     }
-                    $changes .= "\nALTER TABLE $name1 ADD CONSTRAINT $fk FOREIGN KEY $fks2->{$fk};\n";
-                    # CHANGE FK before column for it may be changed
-                    my $weight = 6;
+                    $changes .= "\nALTER TABLE $name1 ADD CONSTRAINT $fk FOREIGN KEY $fks2->{$fk};\n";    
+                    # CHANGE FK after column for it may be changed
+                    my $weight = 5;
                     if ($self->{added_for_fk}{$fk}) {
                         # if fk was changed and it reference by new column, change it after column adding
                         $weight = $self->{added_for_fk}{$fk};
