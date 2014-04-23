@@ -15,7 +15,7 @@ MANIFEST
 Makefile.PL
 README
 t/01use.t
-t/02all.t
+t/02basic.t
 t/90podtest.t
 t/91podcover.t
 t/94metatest.t
